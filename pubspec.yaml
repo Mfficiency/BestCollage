@@ -1,0 +1,41 @@
+# BestCollage — built from the BestToDo app template.
+#
+# Keep `version` as `x.y.z+build`. Nothing in the code hard-codes a version
+# string — the app reads it at runtime via package_info_plus and the tooling
+# reads it from this file. Bump it with: dart run tool/bump_version.dart <ver>
+name: best_collage
+description: BestCollage — put 1 to 4 photos together into one picture.
+publish_to: 'none'
+
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.2
+  package_info_plus: ^8.0.2   # dynamic app version at runtime
+  path_provider: ^2.1.2       # settings + technical-page persistence
+  shared_preferences: ^2.2.2  # intro-shown flag
+  flutter_markdown: ^0.6.10   # Changelog rendering
+  file_selector: ^1.0.0       # backup import / export file picking
+  url_launcher: ^6.2.5        # "Update app" link on the About page
+  fl_chart: ^0.63.0           # startup-times chart
+  image_picker: ^1.2.1
+  exif: ^3.3.0
+  gal: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - CHANGELOG.md
+    - assets/test_report.json

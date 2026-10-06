@@ -1,0 +1,30 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android signing — the real release key is never committed. Without it the
+# build uses the committed android/app/debug.keystore.
+android/key.properties
+android/local.properties
+android/.gradle/
+*.jks
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+
+# Written by the dev build watcher on this machine.
+dev_build_watch.log
+dev_build_watch_last_build.log
+
+# NOTE: docs/screenshots/ and github_releases/ are intentionally committed —
+# the screenshot history, and the last 2 APKs the phone downloads.
+
+# Kotlin daemon error logs
+android/.kotlin/

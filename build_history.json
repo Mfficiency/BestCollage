@@ -1,0 +1,12 @@
+[
+  {
+    "version": "0.1.0+1",
+    "app": "best_collage",
+    "target": "apk",
+    "durationSeconds": 194,
+    "sizeBytes": 24573521,
+    "source": "local",
+    "finishedAt": "2026-10-06T21:01:09.791212Z",
+    "os": "windows"
+  }
+]
