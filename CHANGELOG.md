@@ -24,6 +24,8 @@ prepends a new section here and updates pubspec.yaml — keep this order.
   "BestCollage"; your originals are never touched.
 - Same menu as BestToDo: Settings, About, Changelog, App Logs, Startup Times
   and Test Results.
-- Local build: 2026-10-06 23:01
-- Build duration (apk): 3m 14s
+- Local build: 2026-10-06 23:05
+- Build duration (apk): 15s
 - APK size: 23.4 MB
+- Build duration (windows): 15s
+- Build size (windows): 28.4 MB

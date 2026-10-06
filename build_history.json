@@ -8,5 +8,25 @@
     "source": "local",
     "finishedAt": "2026-10-06T21:01:09.791212Z",
     "os": "windows"
+  },
+  {
+    "version": "0.1.0+1",
+    "app": "best_collage",
+    "target": "apk",
+    "durationSeconds": 15,
+    "sizeBytes": 24573564,
+    "source": "local",
+    "finishedAt": "2026-10-06T21:05:30.039095Z",
+    "os": "windows"
+  },
+  {
+    "version": "0.1.0+1",
+    "app": "best_collage",
+    "target": "windows",
+    "durationSeconds": 15,
+    "sizeBytes": 29785267,
+    "source": "local",
+    "finishedAt": "2026-10-06T21:05:45.875371Z",
+    "os": "windows"
   }
 ]
