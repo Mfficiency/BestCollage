@@ -3,6 +3,18 @@
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
 
+## [0.2.0] - 2026-10-07
+- Previous collages: every collage you save is kept with all its settings.
+  Find them in the app bar (clock icon), the menu, or on the start screen —
+  tap one to open it and keep editing, or delete it. Saving it again updates
+  the same entry.
+- The collage you're working on is saved as you go and comes back exactly as
+  you left it after closing the app or restarting the phone: layout, divider
+  positions, canvas shape, border width and colour, corners, colours, every
+  photo's crop, zoom, rotation and date stamp.
+- Picked photos are copied into the app's own storage so saved collages can
+  still open them later; copies no collage uses any more are cleaned up.
+
 ## [0.1.0] - 2026-10-06
 - First release of BestCollage: pick 1 to 4 photos and put them together in one
   picture.

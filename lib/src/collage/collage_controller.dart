@@ -34,6 +34,10 @@ class CollageController extends ChangeNotifier {
   /// outlines, divider handles and empty-slot placeholders.
   bool exporting = false;
 
+  /// Id of the "Previous collages" entry this collage was saved as or opened
+  /// from; saving again updates that entry. Null for a collage never saved.
+  String? historyId;
+
   LayoutPreset get preset => _preset;
   bool get isEmpty => photos.isEmpty;
   bool get canAddMore => photos.length < 4;
@@ -115,6 +119,7 @@ class CollageController extends ChangeNotifier {
   void clear() {
     photos.clear();
     selected = null;
+    historyId = null;
     globalAdjustments.reset();
     colorScope = ColorScope.all;
     _resetLayoutForCount();
@@ -170,4 +175,103 @@ class CollageController extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  // --- Persistence ----------------------------------------------------------
+
+  static const int _stateVersion = 1;
+
+  /// The whole collage as JSON: layout with divider positions, shape, border,
+  /// colours, date stamps and every photo's crop and edits. Photos are
+  /// referenced by file path.
+  Map<String, dynamic> toJson() => {
+        'version': _stateVersion,
+        'historyId': historyId,
+        'preset': _preset.id,
+        'layout': layout.toJson(),
+        'shape': shape.label,
+        'border': border,
+        'cornerRadius': cornerRadius,
+        'borderColor': borderColor.toARGB32(),
+        'globalAdjustments': globalAdjustments.toJson(),
+        'colorScope': colorScope.name,
+        'showDates': showDates,
+        'dateColor': dateColor.toARGB32(),
+        'selected': selected,
+        'photos': [for (final p in photos) p.toJson()],
+      };
+
+  /// File paths of the photos in a state saved by [toJson].
+  static List<String> photoPaths(Map<String, dynamic> state) => [
+        for (final p in (state['photos'] as List?) ?? const [])
+          if (p is Map && p['path'] is String) p['path'] as String,
+      ];
+
+  /// Replaces everything with a state saved by [toJson]. [loaded] are the
+  /// photos reloaded from [photoPaths], in the same order; null where a file
+  /// is gone. Missing photos are left out (and the layout falls back to the
+  /// default for the new count). Returns how many photos were missing.
+  int restore(Map<String, dynamic> state, List<PhotoItem?> loaded) {
+    final saved = [
+      for (final p in (state['photos'] as List?) ?? const [])
+        if (p is Map && p['path'] is String) p,
+    ];
+    photos.clear();
+    var missing = 0;
+    for (var i = 0; i < saved.length && i < 4; i++) {
+      final item = i < loaded.length ? loaded[i] : null;
+      if (item == null) {
+        missing++;
+        continue;
+      }
+      item.applyJson(saved[i]);
+      photos.add(item);
+    }
+
+    final count = photos.isEmpty ? 1 : photos.length;
+    final preset = layoutPresets
+            .where((p) => p.id == state['preset'] && p.count == count)
+            .firstOrNull ??
+        presetsFor(count).first;
+    _preset = preset;
+    final tree = missing == 0 ? LayoutNode.fromJson(state['layout']) : null;
+    final slots = tree?.slots.toList()?..sort();
+    layout = tree != null &&
+            slots!.length == count &&
+            List.generate(count, (i) => i).every((i) => slots[i] == i)
+        ? tree
+        : preset.build();
+
+    shape = CanvasShape.all
+            .where((s) => s.label == state['shape'])
+            .firstOrNull ??
+        shape;
+    border = jsonDouble(state['border'], 0, 24) ?? border;
+    cornerRadius = jsonDouble(state['cornerRadius'], 0, 32) ?? cornerRadius;
+    borderColor = _color(state['borderColor'], borderColors) ?? borderColor;
+    globalAdjustments
+      ..reset()
+      ..applyJson(state['globalAdjustments']);
+    colorScope = ColorScope.values
+            .where((s) => s.name == state['colorScope'])
+            .firstOrNull ??
+        ColorScope.all;
+    showDates = state['showDates'] as bool? ?? showDates;
+    dateColor = _color(state['dateColor'], dateStampColors) ?? dateColor;
+    final sel = state['selected'];
+    selected = photos.isEmpty
+        ? null
+        : sel is int && sel >= 0 && sel < photos.length
+            ? sel
+            : null;
+    historyId = state['historyId'] as String?;
+    LogService.add('collage',
+        'restored ${photos.length} photo(s)${missing > 0 ? ', $missing missing' : ''}');
+    notifyListeners();
+    return missing;
+  }
+
+  /// One of [palette] matching a saved ARGB value (so the colour dots show it
+  /// as selected); null if it isn't one of them.
+  static Color? _color(Object? v, List<Color> palette) =>
+      v is int ? palette.where((c) => c.toARGB32() == v).firstOrNull : null;
 }

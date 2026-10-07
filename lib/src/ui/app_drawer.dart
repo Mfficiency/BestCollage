@@ -37,7 +37,10 @@ const List<MenuEntry> builtInMenuEntries = [
 /// The navigation drawer, styled like BestToDo's: a primary-coloured header
 /// with the app name and version, then one row per page.
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
+  /// Opens "Previous collages"; the entry is hidden when null.
+  final VoidCallback? onOpenHistory;
+
+  const AppDrawer({super.key, this.onOpenHistory});
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +68,15 @@ class AppDrawer extends StatelessWidget {
             title: const Text('Collage'),
             onTap: () => Navigator.pop(context),
           ),
+          if (onOpenHistory != null)
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Previous collages'),
+              onTap: () {
+                Navigator.pop(context);
+                onOpenHistory!();
+              },
+            ),
           for (final entry in entries)
             ListTile(
               leading: Icon(entry.icon),
