@@ -40,6 +40,16 @@ Branch flow: feature → dev → main.
   photos decoded capped at 2400 px.
 - `collage_saver.dart` — `RepaintBoundary.toImage` at the export size → PNG →
   gallery via `gal` (Android) or a save dialog (desktop).
+- `collage_store.dart` — persistence under `<app documents>/collages/`:
+  `draft.json` (the collage being edited, autosaved ~400 ms after each change
+  and when the app is backgrounded; restored on launch), `history.json` +
+  `thumbs/` ("Previous collages", added/updated on Save), `photos/` (picked
+  files are copied here; `prune` deletes copies nothing references). State is
+  `CollageController.toJson()` / `restore()`. Tests use `MemoryCollageStore`
+  (set `CollageStore.instance` in `setUp` for anything that builds
+  `CollagePage`).
+- `collage_history_page.dart` — the "Previous collages" grid; returns the
+  tapped entry to `CollagePage`, which reopens it.
 
 ## Conventions
 

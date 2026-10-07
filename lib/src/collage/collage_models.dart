@@ -65,7 +65,32 @@ class Adjustments {
         brightness: brightness,
         warmth: warmth,
       );
+
+  Map<String, dynamic> toJson() => {
+        'tone': tone.name,
+        'hue': hue,
+        'saturation': saturation,
+        'brightness': brightness,
+        'warmth': warmth,
+      };
+
+  /// Applies a saved map tolerantly: missing or bad values keep the default.
+  void applyJson(Object? data) {
+    if (data is! Map) return;
+    tone = ToneFilter.values
+            .where((t) => t.name == data['tone'])
+            .firstOrNull ??
+        ToneFilter.original;
+    hue = jsonDouble(data['hue'], -180, 180) ?? 0;
+    saturation = jsonDouble(data['saturation'], -1, 1) ?? 0;
+    brightness = jsonDouble(data['brightness'], -1, 1) ?? 0;
+    warmth = jsonDouble(data['warmth'], -1, 1) ?? 0;
+  }
 }
+
+/// Reads a number from saved JSON, clamped to [min]..[max]; null if missing.
+double? jsonDouble(Object? v, double min, double max) =>
+    v is num && v.isFinite ? v.toDouble().clamp(min, max) : null;
 
 /// Where a photo's date stamp sits inside its cell, and how big it is.
 ///
@@ -85,6 +110,18 @@ class DateStampPlacement {
   DateStampPlacement({this.x = 0.92, this.y = 0.94, this.size = defaultSize});
 
   DateStampPlacement copy() => DateStampPlacement(x: x, y: y, size: size);
+
+  Map<String, dynamic> toJson() => {'x': x, 'y': y, 'size': size};
+
+  static DateStampPlacement fromJson(Object? data) {
+    final p = DateStampPlacement();
+    if (data is Map) {
+      p.x = jsonDouble(data['x'], 0, 1) ?? p.x;
+      p.y = jsonDouble(data['y'], 0, 1) ?? p.y;
+      p.size = jsonDouble(data['size'], minSize, maxSize) ?? p.size;
+    }
+    return p;
+  }
 }
 
 /// Where a photo's date came from — EXIF is exact, the others are guesses.
@@ -140,6 +177,41 @@ class PhotoItem {
     alignX = 0;
     alignY = 0;
   }
+
+  /// Everything the user did to this photo, plus where the file is. The image
+  /// itself is loaded again from [path] when the collage is reopened.
+  Map<String, dynamic> toJson() => {
+        'path': path,
+        'takenAt': takenAt?.toIso8601String(),
+        'dateSource': dateSource.name,
+        'quarterTurns': quarterTurns,
+        'flipped': flipped,
+        'zoom': zoom,
+        'alignX': alignX,
+        'alignY': alignY,
+        'adjustments': adjustments.toJson(),
+        'showDate': showDate,
+        'stamp': stamp.toJson(),
+      };
+
+  /// Restores the edits saved by [toJson] onto a freshly loaded photo.
+  void applyJson(Map data) {
+    final taken = data['takenAt'];
+    if (taken is String) takenAt = DateTime.tryParse(taken) ?? takenAt;
+    dateSource = DateSource.values
+            .where((s) => s.name == data['dateSource'])
+            .firstOrNull ??
+        dateSource;
+    final turns = data['quarterTurns'];
+    if (turns is int) quarterTurns = turns % 4;
+    flipped = data['flipped'] == true;
+    zoom = jsonDouble(data['zoom'], 1, maxZoom) ?? 1;
+    alignX = jsonDouble(data['alignX'], -1, 1) ?? 0;
+    alignY = jsonDouble(data['alignY'], -1, 1) ?? 0;
+    adjustments.applyJson(data['adjustments']);
+    showDate = data['showDate'] as bool? ?? true;
+    stamp = DateStampPlacement.fromJson(data['stamp']);
+  }
 }
 
 /// The collage layout is a binary tree: each [SplitNode] divides its area in
@@ -152,6 +224,33 @@ sealed class LayoutNode {
   int get slotCount;
 
   LayoutNode clone();
+
+  Map<String, dynamic> toJson();
+
+  /// Rebuilds a tree saved by [toJson]; null if the data is malformed.
+  static LayoutNode? fromJson(Object? data) {
+    if (data is! Map) return null;
+    final slot = data['slot'];
+    if (slot is int) return LeafNode(slot);
+    final axis =
+        Axis.values.where((a) => a.name == data['axis']).firstOrNull;
+    final first = fromJson(data['first']);
+    final second = fromJson(data['second']);
+    if (axis == null || first == null || second == null) return null;
+    return SplitNode(axis, first, second,
+        ratio: jsonDouble(data['ratio'], SplitNode.minRatio,
+                SplitNode.maxRatio) ??
+            0.5);
+  }
+
+  /// Slot numbers of every leaf, left to right.
+  Iterable<int> get slots => switch (this) {
+        LeafNode(:final slot) => [slot],
+        SplitNode(:final first, :final second) => [
+            ...first.slots,
+            ...second.slots
+          ],
+      };
 }
 
 class LeafNode extends LayoutNode {
@@ -163,6 +262,9 @@ class LeafNode extends LayoutNode {
 
   @override
   LayoutNode clone() => LeafNode(slot);
+
+  @override
+  Map<String, dynamic> toJson() => {'slot': slot};
 }
 
 class SplitNode extends LayoutNode {
@@ -186,6 +288,14 @@ class SplitNode extends LayoutNode {
   @override
   LayoutNode clone() =>
       SplitNode(axis, first.clone(), second.clone(), ratio: ratio);
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'axis': axis.name,
+        'ratio': ratio,
+        'first': first.toJson(),
+        'second': second.toJson(),
+      };
 }
 
 /// A canvas shape the user can pick. [ratio] is width / height.

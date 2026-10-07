@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -7,8 +10,10 @@ import '../services/log_service.dart';
 import '../ui/app_drawer.dart';
 import 'collage_canvas.dart';
 import 'collage_controller.dart';
+import 'collage_history_page.dart';
 import 'collage_models.dart';
 import 'collage_saver.dart';
+import 'collage_store.dart';
 import 'collage_tools.dart';
 import 'photo_loader.dart';
 
@@ -16,14 +21,39 @@ import 'photo_loader.dart';
 /// images instead of opening the system picker.
 typedef PhotoPicker = Future<List<PhotoItem>> Function(int max);
 
+/// Loads a photo saved in a collage again by its path; null if it's gone.
+typedef PhotoResolver = Future<PhotoItem?> Function(String path);
+
+/// Stores the finished PNG; returns where it went, or null if cancelled.
+typedef PictureSaver = Future<String?> Function(Uint8List png);
+
+/// Renders the on-screen collage as PNG bytes with the given long edge.
+typedef PictureRenderer = Future<Uint8List> Function(
+    RenderRepaintBoundary boundary, int longEdge);
+
 /// The home screen: an empty state that asks for photos, then the collage with
 /// a tool bar underneath (Layout · Photo · Color · Date) and Save in the app
 /// bar.
+///
+/// The collage being edited is saved as you go and restored on the next
+/// launch; saved collages are listed under "Previous collages".
 class CollagePage extends StatefulWidget {
   final PhotoPicker? picker;
   final CollageController? controller;
+  final CollageStore? store;
+  final PhotoResolver? resolver;
+  final PictureSaver? saver;
+  final PictureRenderer? renderer;
 
-  const CollagePage({super.key, this.picker, this.controller});
+  const CollagePage({
+    super.key,
+    this.picker,
+    this.controller,
+    this.store,
+    this.resolver,
+    this.saver,
+    this.renderer,
+  });
 
   @override
   State<CollagePage> createState() => _CollagePageState();
@@ -32,29 +62,132 @@ class CollagePage extends StatefulWidget {
 class _CollagePageState extends State<CollagePage> {
   late final CollageController c = widget.controller ?? CollageController();
   final GlobalKey _boundaryKey = GlobalKey();
+  late final CollageStore _store = widget.store ?? CollageStore.instance;
+  late final AppLifecycleListener _lifecycle;
   CollageTool _tool = CollageTool.layout;
   bool _saving = false;
+
+  /// True until the last session's collage has been loaded back.
+  bool _restoring = true;
+  List<CollageHistoryEntry> _history = const [];
+  Timer? _draftTimer;
+
+  static const _draftDelay = Duration(milliseconds: 400);
+  static const int _thumbnailEdge = 480;
 
   @override
   void initState() {
     super.initState();
     c.addListener(_onChanged);
+    _lifecycle = AppLifecycleListener(
+      onInactive: _flushDraft,
+      onPause: _flushDraft,
+      onDetach: _flushDraft,
+    );
+    _init();
   }
 
   @override
   void dispose() {
+    _flushDraft();
+    _lifecycle.dispose();
     c.removeListener(_onChanged);
     if (widget.controller == null) c.dispose();
     super.dispose();
   }
 
+  Future<void> _init() async {
+    try {
+      if (c.isEmpty) {
+        final draft = await _store.loadDraft();
+        if (draft != null && c.isEmpty && mounted) await _restoreState(draft);
+      }
+    } catch (e) {
+      LogService.add('collage', 'could not restore the last collage: $e');
+    }
+    if (!mounted) return;
+    setState(() => _restoring = false);
+    await _refreshHistory();
+    await _store.prune(inUse: c.photos.map((p) => p.path));
+  }
+
+  Future<void> _refreshHistory() async {
+    final history = await _store.loadHistory();
+    if (mounted) setState(() => _history = history);
+  }
+
   void _onChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    if (_restoring) return;
+    _draftTimer?.cancel();
+    _draftTimer = Timer(_draftDelay, _flushDraft);
+  }
+
+  /// Saves the collage being edited right away (also when the app goes to
+  /// the background, so a restart never loses it).
+  void _flushDraft() {
+    _draftTimer?.cancel();
+    _draftTimer = null;
+    if (_restoring) return;
+    _store.saveDraft(c.toJson());
+  }
+
+  /// Loads a saved state into the editor, reloading its photos from disk.
+  Future<void> _restoreState(Map<String, dynamic> state) async {
+    final resolve = widget.resolver ??
+        (path) => PhotoLoader.load(path, date: (null, DateSource.unknown));
+    final loaded = <PhotoItem?>[
+      for (final path in CollageController.photoPaths(state))
+        await resolve(path),
+    ];
+    final missing = c.restore(state, loaded);
+    if (missing > 0) {
+      _snack(missing == 1
+          ? '1 photo of this collage is no longer on your phone.'
+          : '$missing photos of this collage are no longer on your phone.');
+    }
+  }
+
+  Future<void> _openHistory() async {
+    if (_saving) return;
+    final entry = await Navigator.of(context).push<CollageHistoryEntry>(
+      MaterialPageRoute(builder: (_) => CollageHistoryPage(store: _store)),
+    );
+    await _refreshHistory();
+    if (entry != null) await _openEntry(entry);
+    await _store.prune(inUse: c.photos.map((p) => p.path));
+  }
+
+  Future<void> _openEntry(CollageHistoryEntry entry) async {
+    if (!mounted || _saving) return;
+    if (!c.isEmpty) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Open this collage?'),
+          content: const Text('It replaces the collage you are editing. '
+              'Save that one first if you want to keep it.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Open')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    await _restoreState(entry.state);
+    if (mounted) setState(() => _tool = CollageTool.layout);
   }
 
   Future<List<PhotoItem>> _pick(int max) async {
     try {
-      return await (widget.picker ?? (m) => PhotoLoader.pick(max: m))(max);
+      return await (widget.picker ??
+          (m) => PhotoLoader.pick(max: m, keep: _store.keepPhoto))(max);
     } catch (e) {
       _snack('Could not open your photos: $e');
       return const [];
@@ -111,12 +244,29 @@ class _CollagePageState extends State<CollagePage> {
       final boundary = _boundaryKey.currentContext?.findRenderObject()
           as RenderRepaintBoundary?;
       if (boundary == null) throw StateError('collage not on screen');
-      final png = await CollageSaver.render(
-          boundary, AppSettings.instance.exportLongEdge);
+      final render = widget.renderer ?? CollageSaver.render;
+      final png = await render(boundary, AppSettings.instance.exportLongEdge);
+      Uint8List? thumb;
+      try {
+        thumb = await render(boundary, _thumbnailEdge);
+      } catch (e) {
+        LogService.add('save', 'no thumbnail: $e');
+      }
       c.exporting = false;
       c.changed();
-      final where = await CollageSaver.save(png);
-      if (where != null) _snack('Saved to $where');
+      final where = await (widget.saver ?? CollageSaver.save)(png);
+      if (where != null) {
+        try {
+          final entry = await _store.saveToHistory(c.toJson(),
+              id: c.historyId, thumbnail: thumb);
+          c.historyId = entry.id;
+          await _refreshHistory();
+        } catch (e) {
+          // The picture itself is saved; only the history entry is missing.
+          LogService.add('save', 'not added to previous collages: $e');
+        }
+        _snack('Saved to $where');
+      }
     } catch (e) {
       LogService.add('save', 'failed: $e');
       _snack('Could not save: $e');
@@ -137,7 +287,7 @@ class _CollagePageState extends State<CollagePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const AppDrawer(),
+      drawer: AppDrawer(onOpenHistory: _openHistory),
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
@@ -148,6 +298,11 @@ class _CollagePageState extends State<CollagePage> {
         ),
         title: const Text(AppConfig.appName),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Previous collages',
+            onPressed: _saving ? null : _openHistory,
+          ),
           if (!c.isEmpty) ...[
             IconButton(
               icon: const Icon(Icons.note_add_outlined),
@@ -170,8 +325,17 @@ class _CollagePageState extends State<CollagePage> {
           ],
         ],
       ),
-      body: c.isEmpty ? _EmptyState(onPick: _addPhotos) : _editor(),
-      bottomNavigationBar: c.isEmpty
+      body: _restoring
+          ? const Center(child: CircularProgressIndicator())
+          : c.isEmpty
+              ? _EmptyState(
+                  onPick: _addPhotos,
+                  history: _history,
+                  onOpen: _openEntry,
+                  onShowAll: _openHistory,
+                )
+              : _editor(),
+      bottomNavigationBar: c.isEmpty || _restoring
           ? null
           : NavigationBar(
               height: 64,
@@ -243,7 +407,18 @@ class _CollagePageState extends State<CollagePage> {
 
 class _EmptyState extends StatelessWidget {
   final VoidCallback onPick;
-  const _EmptyState({required this.onPick});
+  final List<CollageHistoryEntry> history;
+  final ValueChanged<CollageHistoryEntry> onOpen;
+  final VoidCallback onShowAll;
+
+  const _EmptyState({
+    required this.onPick,
+    required this.history,
+    required this.onOpen,
+    required this.onShowAll,
+  });
+
+  static const int _recentCount = 10;
 
   @override
   Widget build(BuildContext context) {
@@ -275,6 +450,44 @@ class _EmptyState extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 28, vertical: 16)),
             ),
+            if (history.isNotEmpty) ...[
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Previous collages',
+                        style: theme.textTheme.titleMedium),
+                  ),
+                  TextButton(
+                      onPressed: onShowAll,
+                      child: Text('See all (${history.length})')),
+                ],
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: 120,
+                child: ListView.separated(
+                  key: const Key('recent-collages'),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: history.length.clamp(0, _recentCount),
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) => SizedBox(
+                    width: 104,
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => onOpen(history[i]),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: CollageThumbnail(entry: history[i]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
