@@ -3,6 +3,11 @@
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
 
+## [0.2.1] - 2026-10-07
+- New app icon: the BestCollage mark (three tiles with a motion blur), as an
+  adaptive icon that fits round and rounded launcher shapes, a themed
+  (monochrome) icon on Android 13+, and the Windows app icon.
+
 ## [0.2.0] - 2026-10-07
 - Previous collages: every collage you save is kept with all its settings.
   Find them in the app bar (clock icon), the menu, or on the start screen —
