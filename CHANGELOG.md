@@ -7,6 +7,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
 - App icon: the logo as designed — black on a white rounded square — on
   every launcher, without a circle around it. Android 13 themed icons use the
   mark on its own.
+- Local build: 2026-10-07 15:46
+- Build duration (apk): 1m 8s
+- APK size: 23.7 MB
+- Build duration (windows): 41s
+- Build size (windows): 28.5 MB
 
 ## [0.3.0] - 2026-10-07
 - Automatic updates, like BestToDo: while the app is open it checks for a
