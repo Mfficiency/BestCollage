@@ -3,6 +3,16 @@
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
 
+## [0.2.1] - 2026-10-07
+- New app icon: the BestCollage mark (three tiles with a motion blur), as an
+  adaptive icon that fits round and rounded launcher shapes, a themed
+  (monochrome) icon on Android 13+, and the Windows app icon.
+- Local build: 2026-10-07 13:36
+- Build duration (apk): 1m 25s
+- APK size: 23.6 MB
+- Build duration (windows): 52s
+- Build size (windows): 28.5 MB
+
 ## [0.2.0] - 2026-10-07
 - Previous collages: every collage you save is kept with all its settings.
   Find them in the app bar (clock icon), the menu, or on the start screen —
@@ -14,6 +24,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
   photo's crop, zoom, rotation and date stamp.
 - Picked photos are copied into the app's own storage so saved collages can
   still open them later; copies no collage uses any more are cleaned up.
+- Local build: 2026-10-07 12:47
+- Build duration (apk): 2m 16s
+- APK size: 23.5 MB
+- Build duration (windows): 1m 3s
+- Build size (windows): 28.5 MB
 
 ## [0.1.0] - 2026-10-06
 - First release of BestCollage: pick 1 to 4 photos and put them together in one
@@ -36,6 +51,8 @@ prepends a new section here and updates pubspec.yaml — keep this order.
   "BestCollage"; your originals are never touched.
 - Same menu as BestToDo: Settings, About, Changelog, App Logs, Startup Times
   and Test Results.
-- Local build: 2026-10-06 23:01
-- Build duration (apk): 3m 14s
+- Local build: 2026-10-06 23:05
+- Build duration (apk): 15s
 - APK size: 23.4 MB
+- Build duration (windows): 15s
+- Build size (windows): 28.4 MB
