@@ -19,6 +19,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
   installs the newest version with a progress bar, and offers to go back to
   the previous version.
 - The first update asks once to allow BestCollage to install apps.
+- Local build: 2026-10-07 15:37
+- Build duration (apk): 2m 7s
+- APK size: 23.7 MB
+- Build duration (windows): 1m 3s
+- Build size (windows): 28.6 MB
 
 ## [0.2.2] - 2026-10-07
 - App icon: no more white circle behind it — the launcher shows just the mark
