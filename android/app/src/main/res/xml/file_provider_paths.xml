@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paths the update FileProvider may share with the package installer.
+     Update APKs land in the app's external-files updates/ dir (where
+     DownloadManager writes them, see MainActivity.startBackgroundDownload). -->
+<paths>
+    <external-files-path name="updates" path="updates/" />
+</paths>

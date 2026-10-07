@@ -26,10 +26,12 @@ export 'src/models/menu_entry.dart';
 export 'src/models/start_page.dart';
 export 'src/models/test_report.dart';
 
+export 'src/services/auto_update_checker.dart';
 export 'src/services/backup_service.dart';
 export 'src/services/log_service.dart';
 export 'src/services/startup_time_service.dart';
 export 'src/services/test_report_service.dart';
+export 'src/services/update_service.dart';
 
 export 'src/theme/app_theme.dart';
 
@@ -38,6 +40,7 @@ export 'src/util/date_time_format.dart';
 
 export 'src/ui/about_page.dart';
 export 'src/ui/app_logs_page.dart';
+export 'src/ui/auto_update_dialog.dart';
 export 'src/ui/changelog_page.dart';
 export 'src/ui/intro_page.dart';
 export 'src/ui/app_drawer.dart';

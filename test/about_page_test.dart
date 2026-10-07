@@ -13,6 +13,6 @@ void main() {
     expect(find.text(AppConfig.appName), findsOneWidget);
     expect(find.textContaining('v2.1.0+9'), findsOneWidget);
     expect(find.text('Replay Introduction'), findsOneWidget);
-    expect(find.text('Update App'), findsOneWidget);
+    expect(find.text('Check for updates'), findsOneWidget);
   });
 }

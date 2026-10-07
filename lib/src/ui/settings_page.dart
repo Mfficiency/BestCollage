@@ -32,10 +32,11 @@ class _SettingsPageState extends State<SettingsPage> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _tabsHeaderKey = GlobalKey();
   final List<GlobalKey> _sectionKeys =
-      List<GlobalKey>.generate(3, (_) => GlobalKey());
+      List<GlobalKey>.generate(_sectionTitles.length, (_) => GlobalKey());
   static const List<String> _sectionTitles = [
     'Appearance',
     'Collage',
+    'Updates',
     'Data',
   ];
   int _activeSectionIndex = 0;
@@ -57,9 +58,11 @@ class _SettingsPageState extends State<SettingsPage> {
     _SearchEntry('Date format', 0, 'display day month year'),
     _SearchEntry('Export size', 1, 'resolution pixels quality save picture'),
     _SearchEntry('Date stamp on new collages', 1, 'date taken show default'),
-    _SearchEntry('Export everything', 2, 'backup save json data settings'),
-    _SearchEntry('Export settings', 2, 'backup save json'),
-    _SearchEntry('Import', 2, 'restore backup load json'),
+    _SearchEntry('Automatically check for updates', 2,
+        'update upgrade new version install apk download'),
+    _SearchEntry('Export everything', 3, 'backup save json data settings'),
+    _SearchEntry('Export settings', 3, 'backup save json'),
+    _SearchEntry('Import', 3, 'restore backup load json'),
   ];
 
   @override
@@ -301,8 +304,24 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       );
 
-  Widget _dataSection() => SettingsSection(
+  Widget _updatesSection() => SettingsSection(
         sectionKey: _sectionKeys[2],
+        title: 'Updates',
+        children: [
+          SwitchListTile(
+            title: const Text('Automatically check for updates'),
+            subtitle: const Text(
+                'Checks for a newer version every minute while the app is '
+                'open and asks whether to download and install it. '
+                'About → Check for updates always works.'),
+            value: _s.autoUpdateCheckEnabled,
+            onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
+          ),
+        ],
+      );
+
+  Widget _dataSection() => SettingsSection(
+        sectionKey: _sectionKeys[3],
         title: 'Data',
         children: [
           Padding(
@@ -447,6 +466,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     : [
                         _appearanceSection(),
                         _collageSection(),
+                        _updatesSection(),
                         _dataSection(),
                       ],
               ),
