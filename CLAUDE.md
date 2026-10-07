@@ -53,6 +53,16 @@ Branch flow: feature → dev → main.
   `CollagePage`).
 - `collage_history_page.dart` — the "Previous collages" grid; returns the
   tapped entry to `CollagePage`, which reopens it.
+- `services/update_service.dart` + `auto_update_checker.dart` — in-app
+  updates ported from BestToDo: reads the `github_releases/` listing on `dev`
+  (GitHub contents API, public, no auth), downloads with Android's
+  DownloadManager and opens the installer via the `bestcollage/update`
+  channel in `MainActivity.kt` (FileProvider + `REQUEST_INSTALL_PACKAGES`).
+  `CollageApp` polls every minute on Android (Settings → Updates) and shows
+  `auto_update_dialog.dart`; About has "Check for updates" + rollback. Builds
+  must keep the same signing key (committed `debug.keystore`) to install over
+  each other. Tests fake it via `fetchOverride` / `channelOverride` /
+  `prefsOverride`.
 
 ## Conventions
 

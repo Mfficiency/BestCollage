@@ -14,7 +14,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Section chips.
-    for (final title in const ['Appearance', 'Collage', 'Data']) {
+    for (final title in const ['Appearance', 'Collage', 'Updates', 'Data']) {
       expect(find.text(title), findsWidgets, reason: title);
     }
     // A few representative controls from the first (visible) section.

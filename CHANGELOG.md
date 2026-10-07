@@ -3,6 +3,42 @@
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
 
+## [0.3.1] - 2026-10-07
+- App icon: the logo as designed — black on a white rounded square — on
+  every launcher, without a circle around it. Android 13 themed icons use the
+  mark on its own.
+- Local build: 2026-10-07 15:46
+- Build duration (apk): 1m 8s
+- APK size: 23.7 MB
+- Build duration (windows): 41s
+- Build size (windows): 28.5 MB
+
+## [0.3.0] - 2026-10-07
+- Automatic updates, like BestToDo: while the app is open it checks for a
+  newer version every minute (and whenever you come back to it) and asks
+  "New version available — download and install?". Yes downloads it in the
+  background (it keeps going if you leave the app or switch between Wi-Fi and
+  mobile data) and opens Android's installer when it's done. Turn it off in
+  Settings → Updates.
+- About → Check for updates: shows whether you're up to date, downloads and
+  installs the newest version with a progress bar, and offers to go back to
+  the previous version.
+- The first update asks once to allow BestCollage to install apps.
+- Local build: 2026-10-07 15:37
+- Build duration (apk): 2m 7s
+- APK size: 23.7 MB
+- Build duration (windows): 1m 3s
+- Build size (windows): 28.6 MB
+
+## [0.2.2] - 2026-10-07
+- App icon: no more white circle behind it — the launcher shows just the mark
+  on your wallpaper, a little bigger than before.
+- Local build: 2026-10-07 14:05
+- Build duration (apk): 25s
+- APK size: 23.6 MB
+- Build duration (windows): 21s
+- Build size (windows): 28.5 MB
+
 ## [0.2.1] - 2026-10-07
 - New app icon: the BestCollage mark (three tiles with a motion blur), as an
   adaptive icon that fits round and rounded launcher shapes, a themed

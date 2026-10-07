@@ -53,6 +53,11 @@ class AppSettings extends ChangeNotifier {
   int exportLongEdge = exportSizes[1];
   bool dateStampByDefault = false;
 
+  // --- Updates --------------------------------------------------------------
+  /// Poll GitHub every minute while the app is open and offer to download and
+  /// install a newer build the moment one appears (Android only).
+  bool autoUpdateCheckEnabled = true;
+
   // --- Notifications --------------------------------------------------------
   bool notificationsEnabled = false;
   int notificationDelaySeconds = AppConfig.defaultNotificationDelaySeconds;
@@ -112,6 +117,7 @@ class AppSettings extends ChangeNotifier {
         'quietHoursEndMinutes': quietHoursEndMinutes,
         'exportLongEdge': exportLongEdge,
         'dateStampByDefault': dateStampByDefault,
+        'autoUpdateCheckEnabled': autoUpdateCheckEnabled,
       };
 
   /// Applies a settings map tolerantly: unknown/missing keys keep the current
@@ -152,6 +158,8 @@ class AppSettings extends ChangeNotifier {
     if (edge != null && exportSizes.contains(edge)) exportLongEdge = edge;
     dateStampByDefault =
         data['dateStampByDefault'] as bool? ?? dateStampByDefault;
+    autoUpdateCheckEnabled =
+        data['autoUpdateCheckEnabled'] as bool? ?? autoUpdateCheckEnabled;
   }
 
   /// Resets to defaults (used between tests).
@@ -168,5 +176,6 @@ class AppSettings extends ChangeNotifier {
     quietHoursEndMinutes = AppConfig.quietHoursEndMinutes;
     exportLongEdge = exportSizes[1];
     dateStampByDefault = false;
+    autoUpdateCheckEnabled = true;
   }
 }
