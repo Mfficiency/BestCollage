@@ -39,6 +39,7 @@ void main() {
     // fake-async zone. It does NOT fabricate any data.
     final dir = Directory.systemTemp.createTempSync('best_collage_shots');
     PathProviderPlatform.instance = _FakePathProvider(dir.path);
+    CollageStore.instance = MemoryCollageStore();
   });
 
   testWidgets('capture every screen', (tester) async {
@@ -156,6 +157,9 @@ void main() {
         () => AppSettings.instance.themeMode = AppThemeMode.system);
 
     // --- Drawer ---
+    // A fresh store: the draft above holds in-memory test photos that can't
+    // be reloaded from disk.
+    CollageStore.instance = MemoryCollageStore();
     await pump(const CollageApp(showIntro: false));
     await tester.tap(find.byTooltip('Open navigation menu'));
     await tester.pumpAndSettle();

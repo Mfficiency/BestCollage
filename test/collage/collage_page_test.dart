@@ -8,6 +8,7 @@ void main() {
   setUp(() {
     AppSettings.instance.resetForTest();
     AppVersion.setForTest('0.1.0', '1');
+    CollageStore.instance = MemoryCollageStore();
   });
   tearDown(AppVersion.resetForTest);
 

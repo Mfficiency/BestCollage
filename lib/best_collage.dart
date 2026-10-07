@@ -11,9 +11,11 @@ export 'src/app_settings.dart';
 
 export 'src/collage/collage_canvas.dart';
 export 'src/collage/collage_controller.dart';
+export 'src/collage/collage_history_page.dart';
 export 'src/collage/collage_models.dart';
 export 'src/collage/collage_page.dart';
 export 'src/collage/collage_saver.dart';
+export 'src/collage/collage_store.dart';
 export 'src/collage/collage_tools.dart';
 export 'src/collage/color_matrix.dart';
 export 'src/collage/layouts.dart';

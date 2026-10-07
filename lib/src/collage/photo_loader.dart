@@ -24,7 +24,11 @@ class PhotoLoader {
   static final ImagePicker _picker = ImagePicker();
 
   /// Lets the user pick up to [max] photos. Empty when they cancel.
-  static Future<List<PhotoItem>> pick({int max = 4}) async {
+  ///
+  /// [keep] copies each picked file somewhere lasting (the picker's files are
+  /// temporary) and returns the new path; the date is read from the original.
+  static Future<List<PhotoItem>> pick(
+      {int max = 4, Future<String> Function(String path)? keep}) async {
     final List<XFile> files;
     try {
       files = max <= 1
@@ -36,16 +40,25 @@ class PhotoLoader {
     }
     final items = <PhotoItem>[];
     for (final f in files.take(max)) {
-      final item = await load(f.path);
+      final date = await readDate(File(f.path));
+      final path = keep == null ? f.path : await keep(f.path);
+      final item = await load(path, date: date);
       if (item != null) items.add(item);
     }
     LogService.add('photos', 'picked ${files.length}, loaded ${items.length}');
     return items;
   }
 
-  static Future<PhotoItem?> load(String path) async {
+  /// Loads the photo at [path]. Its date is read from the file unless [date]
+  /// is given.
+  static Future<PhotoItem?> load(String path,
+      {(DateTime?, DateSource)? date}) async {
     try {
       final file = File(path);
+      if (!await file.exists()) {
+        LogService.add('photos', 'missing $path');
+        return null;
+      }
       final ImageProvider image = ResizeImage(
         FileImage(file),
         width: maxDecode,
@@ -54,12 +67,12 @@ class PhotoLoader {
         allowUpscaling: false,
       );
       final size = await _decodedSize(image);
-      final (date, source) = await readDate(file);
+      final (takenAt, source) = date ?? await readDate(file);
       return PhotoItem(
         path: path,
         image: image,
         pixelSize: size,
-        takenAt: date,
+        takenAt: takenAt,
         dateSource: source,
       );
     } catch (e) {
