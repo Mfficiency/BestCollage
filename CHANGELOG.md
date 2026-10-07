@@ -7,6 +7,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
 - New app icon: the BestCollage mark (three tiles with a motion blur), as an
   adaptive icon that fits round and rounded launcher shapes, a themed
   (monochrome) icon on Android 13+, and the Windows app icon.
+- Local build: 2026-10-07 13:36
+- Build duration (apk): 1m 25s
+- APK size: 23.6 MB
+- Build duration (windows): 52s
+- Build size (windows): 28.5 MB
 
 ## [0.2.0] - 2026-10-07
 - Previous collages: every collage you save is kept with all its settings.
