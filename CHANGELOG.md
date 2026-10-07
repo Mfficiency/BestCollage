@@ -6,6 +6,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
 ## [0.2.2] - 2026-10-07
 - App icon: no more white circle behind it — the launcher shows just the mark
   on your wallpaper, a little bigger than before.
+- Local build: 2026-10-07 14:05
+- Build duration (apk): 25s
+- APK size: 23.6 MB
+- Build duration (windows): 21s
+- Build size (windows): 28.5 MB
 
 ## [0.2.1] - 2026-10-07
 - New app icon: the BestCollage mark (three tiles with a motion blur), as an
