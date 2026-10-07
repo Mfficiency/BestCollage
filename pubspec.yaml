@@ -7,7 +7,7 @@ name: best_collage
 description: BestCollage — put 1 to 4 photos together into one picture.
 publish_to: 'none'
 
-version: 0.3.0+5
+version: 0.3.1+6
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
