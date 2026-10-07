@@ -3,12 +3,14 @@
     python3 tool/make_icons.py [preview.png]
 
 Writes:
-  * Android legacy icons      res/mipmap-*/ic_launcher.png (48 dp, white square)
-  * Android adaptive icon     res/mipmap-*/ic_launcher_foreground.png (108 dp,
-    transparent; also used as the Android 13 themed "monochrome" layer) on a
-    white background — see res/mipmap-anydpi-v26/ic_launcher.xml
+  * Android legacy icons      res/mipmap-*/ic_launcher.png (48 dp)
+  * Android adaptive icon     res/mipmap-*/ic_launcher_foreground.png (108 dp;
+    also used as the Android 13 themed "monochrome" layer) on a transparent
+    background — see res/mipmap-anydpi-v26/ic_launcher.xml
   * Windows                   windows/runner/resources/app_icon.ico
   * assets/app_icon.png       512 px
+Every icon is transparent around the mark, so launchers show no circle or
+square behind it — just the mark on the wallpaper.
 Needs Pillow.
 """
 import sys
@@ -19,9 +21,10 @@ SOURCE = 'assets/icon_source.png'
 RES = 'android/app/src/main/res'
 DENSITIES = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
 
-# Adaptive icons are 108 dp; launchers may mask all but a 66 dp circle. The
-# mark is square-ish, so it must fit inside that circle: ~46 dp side.
-ADAPTIVE_CONTENT_DP = 46
+# Adaptive icons are 108 dp; launchers show the middle 72 dp, cut to their
+# shape (often a circle). The mark's rounded corners must stay inside that
+# circle (and nearly inside the 66 dp safe zone): 50 dp side.
+ADAPTIVE_CONTENT_DP = 50
 # Legacy / desktop icons: mark size as a share of the square.
 LEGACY_FILL = 0.80
 
@@ -51,13 +54,11 @@ def main():
     bbox = alpha.point(lambda v: 255 if v > 6 else 0).getbbox()
     mark = max(bbox[2] - bbox[0], bbox[3] - bbox[1])
 
-    legacy_t = crop_padded(ink, square_around(bbox, mark / LEGACY_FILL))
-    legacy = Image.alpha_composite(
-        Image.new('RGBA', legacy_t.size, (255, 255, 255, 255)), legacy_t)
+    legacy = crop_padded(ink, square_around(bbox, mark / LEGACY_FILL))
     fg = crop_padded(ink, square_around(bbox, mark * 108 / ADAPTIVE_CONTENT_DP))
 
     for d, s in DENSITIES.items():
-        legacy.resize((round(48 * s),) * 2, Image.LANCZOS).convert('RGB').save(
+        legacy.resize((round(48 * s),) * 2, Image.LANCZOS).save(
             f'{RES}/mipmap-{d}/ic_launcher.png', optimize=True)
         fg.resize((round(108 * s),) * 2, Image.LANCZOS).save(
             f'{RES}/mipmap-{d}/ic_launcher_foreground.png', optimize=True)
@@ -70,22 +71,22 @@ def main():
                (256, 256)])
 
     if len(sys.argv) > 1:
-        # Legacy square, adaptive in a circle mask, adaptive in a squircle-ish
-        # rounded square — to eyeball the safe zone.
-        sheet = Image.new('RGB', (740, 260), (225, 225, 225))
-        sheet.paste(legacy.resize((216, 216)).convert('RGB'), (20, 22))
-        tile = Image.alpha_composite(
-            Image.new('RGBA', (324, 324), (255, 255, 255, 255)),
-            fg.resize((324, 324), Image.LANCZOS)).crop((54, 54, 270, 270))
-        for i, shape in enumerate(('circle', 'rounded')):
+        # How a launcher shows it on light and dark wallpapers: the visible
+        # 72 dp of the adaptive icon (cut to a circle — nothing of the circle
+        # shows, since the background is transparent) and the legacy icon.
+        sheet = Image.new('RGBA', (740, 260), (0, 0, 0, 255))
+        for i, wall in enumerate(((176, 196, 222), (60, 70, 90))):
+            sheet.paste(wall + (255,), (i * 370, 0, i * 370 + 370, 260))
+            visible = fg.resize((324, 324), Image.LANCZOS).crop(
+                (54, 54, 270, 270))
             m = Image.new('L', (216, 216), 0)
-            if shape == 'circle':
-                ImageDraw.Draw(m).ellipse((0, 0, 215, 215), fill=255)
-            else:
-                ImageDraw.Draw(m).rounded_rectangle((0, 0, 215, 215), 60,
-                                                    fill=255)
-            sheet.paste(tile.convert('RGB'), (262 + i * 240, 22), m)
-        sheet.save(sys.argv[1])
+            ImageDraw.Draw(m).ellipse((0, 0, 215, 215), fill=255)
+            clipped = Image.new('RGBA', (216, 216), (0, 0, 0, 0))
+            clipped.paste(visible, (0, 0), m)
+            sheet.alpha_composite(clipped, (i * 370 + 10, 22))
+            sheet.alpha_composite(legacy.resize((120, 120), Image.LANCZOS),
+                                  (i * 370 + 240, 70))
+        sheet.convert('RGB').save(sys.argv[1])
 
 
 if __name__ == '__main__':

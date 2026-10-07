@@ -3,6 +3,10 @@
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
 
+## [0.2.2] - 2026-10-07
+- App icon: no more white circle behind it — the launcher shows just the mark
+  on your wallpaper, a little bigger than before.
+
 ## [0.2.1] - 2026-10-07
 - New app icon: the BestCollage mark (three tiles with a motion blur), as an
   adaptive icon that fits round and rounded launcher shapes, a themed
