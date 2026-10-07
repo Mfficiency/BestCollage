@@ -14,6 +14,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
   photo's crop, zoom, rotation and date stamp.
 - Picked photos are copied into the app's own storage so saved collages can
   still open them later; copies no collage uses any more are cleaned up.
+- Local build: 2026-10-07 12:47
+- Build duration (apk): 2m 16s
+- APK size: 23.5 MB
+- Build duration (windows): 1m 3s
+- Build size (windows): 28.5 MB
 
 ## [0.1.0] - 2026-10-06
 - First release of BestCollage: pick 1 to 4 photos and put them together in one
