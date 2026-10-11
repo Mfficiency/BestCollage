@@ -6,6 +6,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
 ## [0.3.2] - 2026-10-11
 - App icon: the logo image exactly as designed — no tile, no rounded
   corners. Android 13 themed icons use the mark on its own.
+- Local build: 2026-10-11 12:26
+- Build duration (apk): 1m 12s
+- APK size: 23.9 MB
+- Build duration (windows): 26s
+- Build size (windows): 28.6 MB
 
 ## [0.3.1] - 2026-10-07
 - App icon: the logo as designed — black on a white rounded square — on
