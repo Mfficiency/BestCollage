@@ -38,6 +38,10 @@ class AutoUpdateChecker {
 
   bool get isRunning => _timer != null;
 
+  /// Where a build found by [checkNow] goes: the app's silent download
+  /// (`CollageAppState`), set even while the poll is off.
+  UpdateFoundCallback? onFound;
+
   /// Checks right away, then every [interval]. Calling it again restarts the
   /// timer with the new callback.
   void start(UpdateFoundCallback onUpdateFound, {Duration? testInterval}) {
@@ -62,6 +66,20 @@ class AutoUpdateChecker {
     final last = _lastCheck;
     if (last != null && now().difference(last) < interval) return;
     await checkOnce(onUpdateFound);
+  }
+
+  /// Pull-down on the changelog: checks right away, whatever the interval or
+  /// an earlier "Later", and hands a newer build to [onFound] (download in
+  /// the background, then ask). Returns that build, or null when this is the
+  /// newest; throws when GitHub can't be read, so the caller can say so.
+  Future<UpdateInfo?> checkNow() async {
+    _lastCheck = now();
+    final update = await UpdateService.instance.checkForUpdate();
+    if (update != null && update.apkUrl != null) {
+      _dismissedVersion = null;
+      onFound?.call(update);
+    }
+    return update;
   }
 
   /// Runs one check. Network errors are swallowed — it's a silent background

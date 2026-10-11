@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:best_collage/best_collage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// One GitHub releases-API entry for [version] (`x.y.z+build`) on [channel].
@@ -413,6 +414,42 @@ void main() {
       await unmount(tester);
     });
 
+    testWidgets(
+        'a failed background download leaves a banner; Install '
+        'downloads it again and installs', (tester) async {
+      final installed = <String>[];
+      var attempts = 0;
+      UpdateService.instance
+        ..fetchOverride = ((_) async => releasesJson(['0.2.2+4', '0.3.0+6']))
+        ..fileExistsOverride = ((_) => true)
+        ..channelOverride = (method, args) async {
+          switch (method) {
+            case 'startBackgroundDownload':
+              attempts++;
+              return {'downloadId': attempts};
+            case 'queryDownload':
+              return attempts == 1
+                  ? {'status': 'failed', 'reason': 1000}
+                  : {'status': 'successful', 'localPath': '/x/new.apk'};
+            case 'installApk':
+              installed.add(args['path'] as String);
+              return 'ok';
+          }
+          return null;
+        };
+      await pumpApp(tester);
+      expect(find.text('Update ready'), findsNothing);
+      expect(find.byKey(const Key('update.banner.download')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('update.banner.download')));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 800));
+      }
+      expect(attempts, 2);
+      expect(installed, ['/x/new.apk']);
+      await unmount(tester);
+    });
+
     testWidgets('an APK downloaded before a restart is reused', (tester) async {
       final calls = fakeUpdate();
       UpdateService.instance.prefsOverride = {
@@ -489,6 +526,47 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: AboutPage()));
       await tester.tap(find.text('Check for updates'));
       await tester.pumpAndSettle();
+      expect(find.textContaining('Update check failed'), findsOneWidget);
+    });
+  });
+
+  group('Changelog page', () {
+    Future<void> pullDown(WidgetTester tester) async {
+      AppVersion.setForTest('0.2.2', '4');
+      await tester.pumpWidget(const MaterialApp(home: ChangelogPage()));
+      // The asset loads outside the fake clock.
+      for (var i = 0; i < 50 && find.byType(Markdown).evaluate().isEmpty; i++) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      await tester.fling(find.byType(Markdown), const Offset(0, 400), 1000);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('pulling down hands a newer build to the silent download',
+        (tester) async {
+      UpdateService.instance.fetchOverride =
+          (_) async => releasesJson(['0.2.2+4', '0.3.0+6']);
+      final found = <String>[];
+      AutoUpdateChecker.instance
+        ..onFound = ((i) => found.add(i.version))
+        ..dismiss('0.3.0+6');
+      await pullDown(tester);
+      expect(found, ['0.3.0+6'], reason: 'asked for, so even after "Later"');
+      expect(find.textContaining('Version 0.3.0+6 found'), findsOneWidget);
+    });
+
+    testWidgets('pulling down says so when up to date', (tester) async {
+      UpdateService.instance.fetchOverride =
+          (_) async => releasesJson(['0.2.2+4']);
+      await pullDown(tester);
+      expect(find.text('You have the newest version.'), findsOneWidget);
+    });
+
+    testWidgets('pulling down shows a failed check', (tester) async {
+      UpdateService.instance.fetchOverride = (_) async => throw 'no network';
+      await pullDown(tester);
       expect(find.textContaining('Update check failed'), findsOneWidget);
     });
   });

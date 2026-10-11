@@ -12,13 +12,16 @@
 #                  label "BestCollage Dev" / "BestCollage Staging").
 #   BUILD_NUMBER   versionCode (builder: 10000 + commit count); default: the
 #                  pubspec build number.
-#   PUBLISH=1      publish a GitHub release in Mfficiency/BestCollage (tag
+#   PUBLISH=1      commit the APK to github_releases/<channel>/ on the branch
+#                  ([skip ci], so it doesn't trigger another build) and
+#                  publish a GitHub release in Mfficiency/BestCollage (tag
 #                  v<x.y.z>-<build>, plus -staging / -dev; those are
-#                  prereleases). Without it only the APK is built, into
-#                  build/channel/.
-# It builds the APK only, commits and pushes nothing, exits 0 without building
-# when the release already exists, and needs android/app/debug.keystore (the
-# app's signing key, not in git) to be present.
+#                  prereleases). Without it the APK is only built, into
+#                  github_releases/<channel>/ (nothing committed).
+# Only that APK commit is made (no version bump, no CHANGELOG lines). It exits
+# 0 without building when the release already exists or HEAD only changes
+# github_releases/, and needs android/app/debug.keystore (the app's signing
+# key, not in git) to be present.
 #
 # "all" builds the APK and the Windows exe, stages the APK into
 # github_releases/ (legacy folder, newest 2 kept), records build time & size,
@@ -37,6 +40,35 @@ function Invoke-Checked {
   & $Exe @Arguments
   if ($LASTEXITCODE -ne 0) {
     throw "$Exe $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+  }
+}
+
+# Exit code of a native command, without throwing or printing its output.
+function Test-Native {
+  param([string] $Exe, [string[]] $Arguments)
+  $saved = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  & $Exe @Arguments *> $null
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $saved
+  return $code
+}
+
+# The commit a release build is for: HEAD, or, when HEAD is this script's own
+# APK commit (it only changes $Folder), the newest commit below it that
+# changes something else. So an APK commit whose release went out finds that
+# release and stops, a release that failed after the push is retried, and a
+# push the APK commit was rebased onto still gets built.
+function Get-SourceCommit {
+  param([string] $Folder)
+  $commit = (& git rev-parse HEAD).Trim()
+  while ($true) {
+    $parents = @((& git rev-list --parents -n 1 $commit).Trim() -split ' ' | Select-Object -Skip 1)
+    if ($parents.Count -ne 1) { return $commit }
+    if ((Test-Native 'git' @('diff', '--quiet', $parents[0], $commit, '--', '.', ":(exclude)$Folder")) -ne 0) {
+      return $commit
+    }
+    $commit = $parents[0]
   }
 }
 
@@ -69,10 +101,13 @@ function Invoke-TimedBuild {
 }
 
 # --- release mode (laptop builder) ------------------------------------------
-# One channel APK per push to dev/staging/main, published as a GitHub release
-# of Mfficiency/BestCollage. Commits and pushes nothing.
+# One channel APK per push to dev/staging/main, committed to
+# github_releases/<channel>/ and published as a GitHub release of
+# Mfficiency/BestCollage.
 $ReleaseRepo = 'Mfficiency/BestCollage'
 $AppName = 'BestCollage'
+# Release APKs kept per channel in github_releases/<channel>/.
+$Keep = 2
 
 # The newest CHANGELOG section's user-facing bullets (the build lines that
 # `all` writes are left out).
@@ -112,9 +147,17 @@ function Invoke-Release {
   $name = ($pubspecVersion -split '\+')[0]
   $buildNumber = if ($env:BUILD_NUMBER) { $env:BUILD_NUMBER.Trim() } else { ($pubspecVersion -split '\+')[1] }
   if ($buildNumber -notmatch '^\d+$') { throw "Bad build number '$buildNumber'" }
+  $sha = Get-SourceCommit 'github_releases'
+  $head = (& git rev-parse HEAD).Trim()
+  if ($sha -ne $head) {
+    Write-Host "==> HEAD only changes github_releases/; building $($sha.Substring(0, 7)) below it."
+    # The builder's number is 10000 + HEAD's commit count; use the source's.
+    if ($env:BUILD_NUMBER) {
+      $buildNumber = "$([int]$buildNumber - ([int](& git rev-list --count $head) - [int](& git rev-list --count $sha)))"
+    }
+  }
   $suffix = if ($channel -eq 'main') { '' } else { "-$channel" }
   $tag = "v$name-$buildNumber$suffix"
-  $sha = (& git rev-parse HEAD).Trim()
   $branch = (& git rev-parse --abbrev-ref HEAD).Trim()
   if ($branch -eq 'HEAD') { $branch = $channel }
 
@@ -152,17 +195,36 @@ function Invoke-Release {
 
   $built = 'build/app/outputs/flutter-apk/app-release.apk'
   if (-not (Test-Path $built)) { throw "APK not found at $built" }
-  $outDir = 'build/channel'
-  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-  $apk = Join-Path $outDir "$AppName-$name-$buildNumber$suffix.apk"
+  # Every build lands in github_releases/<channel>/ (one folder per channel,
+  # so merging dev -> staging -> main never conflicts there). Only the newest
+  # $Keep APKs per channel stay; older ones remain on the GitHub releases.
+  $dir = Join-Path 'github_releases' $channel
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $apk = Join-Path $dir "$AppName-$name-$buildNumber$suffix.apk"
   Copy-Item $built $apk -Force
+  Get-ChildItem (Join-Path $dir '*.apk') |
+    Sort-Object { [int]([regex]::Match($_.BaseName, '-([0-9]+)(-dev|-staging)?$').Groups[1].Value) } -Descending |
+    Select-Object -Skip $Keep |
+    Remove-Item -Force
   $sizeMb = '{0:N1} MB' -f ((Get-Item $apk).Length / 1MB)
   Write-Host "==> Built $apk ($sizeMb, $(Format-Duration $seconds))"
 
   if (-not $publish) {
-    Write-Host '==> PUBLISH is not 1: not publishing a release.'
+    Write-Host '==> PUBLISH is not 1: nothing committed or published.'
     return
   }
+
+  # Commit the APK to the branch before releasing: if the push fails, nothing
+  # is released and the next run of this build does both. [skip ci] keeps the
+  # commit from dispatching another laptop build.
+  Invoke-Checked 'git' @('add', '-A', '--', $dir)
+  if ((Test-Native 'git' @('diff', '--cached', '--quiet')) -ne 0) {
+    Invoke-Checked 'git' @('commit', '-q', '-m', "build: $AppName $name+$buildNumber ($channel) [skip ci]")
+    Invoke-Checked 'git' @('pull', '--rebase', '--autostash', '-q', 'origin', $branch)
+    Invoke-Checked 'git' @('push', '-q', 'origin', "HEAD:refs/heads/$branch")
+  }
+  $outDir = 'build/channel'
+  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
   $version = "$name+$buildNumber"
   $title = if ($channel -eq 'main') { "$AppName $version" } else { "$AppName $version ($channel)" }

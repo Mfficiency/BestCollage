@@ -60,8 +60,9 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
   /// Version downloading silently right now.
   String? _downloadingVersion;
 
-  /// Version whose silent download failed this start: not retried until the
-  /// next start (About → Check for updates still works).
+  /// Version whose silent download failed this start: not retried silently
+  /// until the next start; a banner offers Install, which downloads it in
+  /// the foreground ([_downloadAndInstall]).
   String? _failedVersion;
 
   /// Completely downloaded update: `(version, path)`.
@@ -86,6 +87,12 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     _settings.addListener(_onSettingsChanged);
     WidgetsBinding.instance.addObserver(this);
     if (_canAutoUpdate) {
+      // Pull-down on the changelog: asked for, so a failed download is
+      // tried again.
+      AutoUpdateChecker.instance.onFound = (info) {
+        if (_failedVersion == info.version) _failedVersion = null;
+        _onUpdateFound(info);
+      };
       _syncAutoUpdate();
       // A download from an earlier run may have kept going (or finished)
       // while the app was closed — it runs as an Android system service.
@@ -158,15 +165,60 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
             progress.localPath != null) {
           _setReady(version, progress.localPath!);
         } else if (progress.status == DownloadStatus.failed) {
-          _failedVersion = version;
+          _downloadFailed(info);
         }
       }
     } catch (e) {
       LogService.add('update', 'background download failed: $e');
-      _failedVersion = version;
+      _downloadFailed(info);
     } finally {
       if (_downloadingVersion == version) _downloadingVersion = null;
     }
+  }
+
+  void _downloadFailed(UpdateInfo info) {
+    _failedVersion = info.version;
+    final messenger = _messengerKey.currentState;
+    if (messenger == null || _bannerVersion == info.version) return;
+    _bannerVersion = info.version;
+    messenger
+      ..hideCurrentMaterialBanner()
+      ..showMaterialBanner(updateAvailableBanner(
+          info.version, () => unawaited(_downloadAndInstall(info))));
+  }
+
+  /// The failed-download banner's Install: download in the foreground, then
+  /// hand it to Android like the ready banner does.
+  Future<void> _downloadAndInstall(UpdateInfo info) async {
+    if (_downloadingVersion == info.version) return;
+    _downloadingVersion = info.version;
+    _messengerKey.currentState
+      ?..hideCurrentMaterialBanner()
+      ..showSnackBar(
+          SnackBar(content: Text('Downloading version ${info.version}…')));
+    String? path;
+    try {
+      await for (final progress
+          in UpdateService.instance.downloadInBackground(info)) {
+        if (progress.status == DownloadStatus.successful) {
+          path = progress.localPath;
+        }
+      }
+    } catch (e) {
+      LogService.add('update', 'download failed: $e');
+    } finally {
+      if (_downloadingVersion == info.version) _downloadingVersion = null;
+    }
+    if (path == null) {
+      _bannerVersion = null;
+      _downloadFailed(info);
+      return;
+    }
+    _failedVersion = null;
+    _ready = (version: info.version, path: path);
+    _askedVersion = info.version; // tapped Install already: no dialog
+    _bannerVersion = null;
+    await _installReady();
   }
 
   /// Picks up a background download an earlier run didn't see finish; if it

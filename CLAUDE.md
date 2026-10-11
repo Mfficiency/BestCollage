@@ -16,12 +16,18 @@ technical pages.
   (Mfficiency/laptop-builder, self-hosted runner) to run
   `tool\build.ps1 release` in its own clone with `BUILD_CHANNEL` (branch),
   `BUILD_NUMBER` (10000 + commit count) and `PUBLISH=1`. That builds the
-  channel APK only and publishes a GitHub release in Mfficiency/BestCollage —
-  tag `v<x.y.z>-<build>` on main, `...-staging` / `...-dev` (prereleases) on
-  the others — and commits nothing. Each channel is its own app:
+  channel APK, commits it to `github_releases/<channel>/` on the branch
+  (newest 2 kept; `[skip ci]`, so it doesn't trigger another build) and
+  publishes a GitHub release in Mfficiency/BestCollage — tag
+  `v<x.y.z>-<build>` on main, `...-staging` / `...-dev` (prereleases) on the
+  others. Nothing else is committed. A HEAD that only changes
+  `github_releases/` builds the commit below it with that commit's build
+  number (released already → nothing to do; a failed release or a push the
+  APK commit was rebased onto → built then). Each channel is its own app:
   `com.mfficiency.best_collage` "BestCollage", `.staging` "BestCollage
   Staging", `.dev` "BestCollage Dev", so they install side by side. Without
-  `PUBLISH=1` it only builds (`build/channel/`), for local testing.
+  `PUBLISH=1` it only builds (into `github_releases/<channel>/`, not
+  committed), for local testing.
 - Manual build: `powershell -ExecutionPolicy Bypass -File tool\build.ps1 all --release`
   (or `sh tool/build.sh all --release`). Stages the APK to the legacy
   `github_releases/` folder (last 2 kept), records `build_history.json` +
@@ -77,7 +83,10 @@ APK).
   **silently** with DownloadManager (`silent` → `VISIBILITY_HIDDEN`, no
   dialog first). Only when the APK is complete does the app ask: an "Update
   ready" dialog once per version and start, then a banner
-  (`auto_update_dialog.dart`). The finished APK is remembered
+  (`auto_update_dialog.dart`). A failed silent download leaves a banner whose
+  Install downloads in the foreground and installs. Pulling down on the
+  Changelog checks right away (`AutoUpdateChecker.checkNow` → the same
+  silent download). The finished APK is remembered
   (`readyApk`) and reused after a restart. Nothing installs without a tap:
   Install commits it to a PackageInstaller session (`ApkInstaller.kt`,
   `InstallReceiver`) so Android's "Update this app?" is the only step;
@@ -87,8 +96,9 @@ APK).
   `debug.keystore`) to install over each other. Tests fake it via
   `fetchOverride` / `channelOverride` / `prefsOverride` /
   `fileExistsOverride` / `channelForTest` and
-  `CollageAppState.autoUpdateForTest`. `github_releases/` is legacy
-  (installs older than 0.4.1 read it).
+  `CollageAppState.autoUpdateForTest`. The `.apk` files directly in
+  `github_releases/` are legacy (installs older than 0.4.1 read them); the
+  channel builds go into its `<channel>/` subfolders.
 
 ## Conventions
 

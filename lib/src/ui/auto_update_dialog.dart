@@ -41,3 +41,21 @@ MaterialBanner updateReadyBanner(String version, VoidCallback onInstall) {
     ],
   );
 }
+
+/// The banner when the background download of [version] failed: Install
+/// downloads it again in the foreground (with Android's download
+/// notification as progress), then installs it.
+MaterialBanner updateAvailableBanner(String version, VoidCallback onInstall) {
+  return MaterialBanner(
+    leading: const Icon(Icons.system_update_outlined),
+    content: Text("Version $version is available (the background download "
+        "didn't finish)"),
+    actions: [
+      TextButton(
+        key: const Key('update.banner.download'),
+        onPressed: onInstall,
+        child: const Text('Install'),
+      ),
+    ],
+  );
+}
