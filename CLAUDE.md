@@ -20,7 +20,7 @@ technical pages.
   (`%LOCALAPPDATA%\BestTodo\DevBuildWatch\dev-build-watch.ps1`) checks every
   10 minutes; when `origin/dev` moved it pulls and runs `tool\build.ps1 all --release`.
 - Version bump: `dart run tool/bump_version.dart <x.y.z+build> "<entry>"`.
-- App icon: edit `assets/icon_source.png` (black mark on white), then
+- App icon: `assets/icon_source.png` is used as-is (no tile/rounding); edit it, then
   `python3 tool/make_icons.py` (Pillow) regenerates the Android legacy +
   adaptive/monochrome icons, the Windows `.ico` and `assets/app_icon.png`.
 
