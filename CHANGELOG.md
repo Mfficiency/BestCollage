@@ -13,6 +13,11 @@ prepends a new section here and updates pubspec.yaml — keep this order.
   "Go back" offers the channel's previous release.
 - Update checks run every 15 minutes (instead of every minute) and simply
   try again later when GitHub is busy.
+- Local build: 2026-10-11 14:49
+- Build duration (apk): 2m 11s
+- APK size: 23.9 MB
+- Build duration (windows): 51s
+- Build size (windows): 28.6 MB
 
 ## [0.4.0] - 2026-10-11
 - Updates download quietly in the background: no question first, no notification. When the new version is completely downloaded the app asks once whether to install it now (Later keeps a small 'ready to install' banner). Install goes straight to Android's own 'Update this app?' dialog, nothing in between. Nothing installs without your tap, and a finished download survives closing the app
