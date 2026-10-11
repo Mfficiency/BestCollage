@@ -141,15 +141,38 @@ void main() {
       };
       final info = UpdateInfo(
           version: '0.3.0+6', htmlUrl: '', apkUrl: 'https://raw/a.apk');
-      final statuses = await UpdateService.instance
+      final service = UpdateService.instance
+        ..fileExistsOverride = (path) => path == '/x/update.apk';
+      final statuses = await service
           .downloadInBackground(info, interval: Duration.zero)
           .map((p) => p.status)
           .toList();
       expect(statuses, [DownloadStatus.running, DownloadStatus.successful]);
       expect(calls.first, 'startBackgroundDownload');
-      expect(await UpdateService.instance.wasDownloaded('0.3.0+6'), isTrue);
-      expect(await UpdateService.instance.wasDownloaded('0.3.1+7'), isFalse);
-      expect(await UpdateService.instance.pendingDownload(), isNull);
+      // The finished APK is reused (also after a restart)…
+      expect(await service.readyApk('0.3.0+6'), '/x/update.apk');
+      expect(await service.readyApk('0.3.1+7'), isNull);
+      expect(await service.isDownloading('0.3.0+6'), isFalse);
+      // …unless Android cleared it meanwhile.
+      service.fileExistsOverride = (_) => false;
+      expect(await service.readyApk('0.3.0+6'), isNull);
+    });
+
+    test('the automatic download asks for no notification', () async {
+      final args = <String, dynamic>{};
+      UpdateService.instance.channelOverride = (method, a) async {
+        if (method == 'startBackgroundDownload') {
+          args.addAll(a);
+          return {'downloadId': 1};
+        }
+        return {'status': 'successful', 'localPath': '/x/a.apk'};
+      };
+      final info = UpdateInfo(
+          version: '0.3.0+6', htmlUrl: '', apkUrl: 'https://raw/a.apk');
+      await UpdateService.instance
+          .downloadInBackground(info, silent: true)
+          .drain<void>();
+      expect(args['silent'], isTrue);
     });
 
     test('a failed download is forgotten so it can be offered again',
@@ -165,7 +188,121 @@ void main() {
           .last;
       expect(last.status, DownloadStatus.failed);
       expect(last.reason, '1006');
-      expect(await UpdateService.instance.wasDownloaded('0.3.0+6'), isFalse);
+      expect(await UpdateService.instance.readyApk('0.3.0+6'), isNull);
+      expect(await UpdateService.instance.pendingDownload(), isNull);
+    });
+  });
+
+  group('automatic update', () {
+    setUp(() {
+      CollageStore.instance = MemoryCollageStore();
+      CollageAppState.autoUpdateForTest = true;
+    });
+    tearDown(() => CollageAppState.autoUpdateForTest = null);
+
+    /// Fakes GitHub (0.3.0+6 is newer) and the platform channel; returns the
+    /// channel calls.
+    List<String> fakeUpdate({List<String>? installed}) {
+      final calls = <String>[];
+      UpdateService.instance
+        ..fetchOverride = ((_) async => folderJson(['0.2.2+4', '0.3.0+6']))
+        ..fileExistsOverride = ((_) => true)
+        ..channelOverride = (method, args) async {
+          calls.add(method);
+          switch (method) {
+            case 'startBackgroundDownload':
+              expect(args['silent'], isTrue);
+              return {'downloadId': 5};
+            case 'queryDownload':
+              return {'status': 'successful', 'localPath': '/x/new.apk'};
+            case 'installApk':
+              installed?.add(args['path'] as String);
+              return 'ok';
+          }
+          return null;
+        };
+      return calls;
+    }
+
+    Future<void> pumpApp(WidgetTester tester) async {
+      // Set in this zone: awaiting a future made in setUp never resumes here.
+      AppVersion.setForTest('0.2.2', '4');
+      await tester.pumpWidget(const CollageApp(showIntro: false));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    Future<void> unmount(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox());
+      AutoUpdateChecker.instance.stop();
+    }
+
+    testWidgets('downloads silently, then asks; Install hands it to Android',
+        (tester) async {
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
+      await pumpApp(tester);
+      // No "download?" question first: it downloaded, then asks.
+      expect(calls, containsAllInOrder(['startBackgroundDownload']));
+      expect(find.text('Update ready'), findsOneWidget);
+      expect(find.textContaining('Version 0.3.0+6 was downloaded'),
+          findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('update.ready.install')));
+      await tester.pump();
+      await tester.pump();
+      expect(installed, ['/x/new.apk']);
+      await unmount(tester);
+    });
+
+    testWidgets('Later keeps a banner; it is not asked again this start',
+        (tester) async {
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
+      await pumpApp(tester);
+      await tester.tap(find.text('Later'));
+      await tester.pumpAndSettle();
+      expect(find.text('Update ready'), findsNothing);
+      expect(find.text('Version 0.3.0+6 is downloaded and ready to install'),
+          findsOneWidget);
+      expect(installed, isEmpty);
+
+      // Coming back to the app checks again: no new download, no new dialog.
+      for (final s in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(s);
+      }
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(calls.where((c) => c == 'queryDownload').length, 1);
+      expect(calls.where((c) => c == 'startBackgroundDownload').length, 1);
+      expect(find.text('Update ready'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('update.banner.install')));
+      await tester.pump();
+      await tester.pump();
+      expect(installed, ['/x/new.apk']);
+      await unmount(tester);
+    });
+
+    testWidgets('an APK downloaded before a restart is reused',
+        (tester) async {
+      final calls = fakeUpdate();
+      UpdateService.instance.prefsOverride = {
+        'update_downloaded_apk': '{"version":"0.3.0+6","path":"/x/old.apk"}',
+      };
+      await pumpApp(tester);
+      expect(calls, isNot(contains('startBackgroundDownload')));
+      expect(find.text('Update ready'), findsOneWidget);
+      await unmount(tester);
     });
   });
 

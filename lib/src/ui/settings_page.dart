@@ -312,8 +312,9 @@ class _SettingsPageState extends State<SettingsPage> {
             title: const Text('Automatically check for updates'),
             subtitle: const Text(
                 'Checks for a newer version every minute while the app is '
-                'open and asks whether to download and install it. '
-                'About → Check for updates always works.'),
+                'open and downloads it quietly in the background; when it is '
+                'ready the app asks to install it. Nothing installs without '
+                'your tap. About → Check for updates always works.'),
             value: _s.autoUpdateCheckEnabled,
             onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
           ),

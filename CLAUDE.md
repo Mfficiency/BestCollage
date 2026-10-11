@@ -54,15 +54,21 @@ Branch flow: feature → dev → main.
 - `collage_history_page.dart` — the "Previous collages" grid; returns the
   tapped entry to `CollagePage`, which reopens it.
 - `services/update_service.dart` + `auto_update_checker.dart` — in-app
-  updates ported from BestToDo: reads the `github_releases/` listing on `dev`
-  (GitHub contents API, public, no auth), downloads with Android's
-  DownloadManager and opens the installer via the `bestcollage/update`
-  channel in `MainActivity.kt` (FileProvider + `REQUEST_INSTALL_PACKAGES`).
-  `CollageApp` polls every minute on Android (Settings → Updates) and shows
-  `auto_update_dialog.dart`; About has "Check for updates" + rollback. Builds
-  must keep the same signing key (committed `debug.keystore`) to install over
+  updates (same flow as Hally Remote): reads the `github_releases/` listing on
+  `dev` (GitHub contents API, public, no auth). `CollageApp` polls every
+  minute on Android (Settings → Updates); a newer build downloads
+  **silently** with DownloadManager (`silent` → `VISIBILITY_HIDDEN`, no
+  dialog first). Only when the APK is complete does the app ask: an "Update
+  ready" dialog once per version and start, then a banner
+  (`auto_update_dialog.dart`). The finished APK is remembered
+  (`readyApk`) and reused after a restart. Nothing installs without a tap:
+  Install commits it to a PackageInstaller session (`ApkInstaller.kt`,
+  `InstallReceiver`) so Android's "Update this app?" is the only step;
+  without the "install unknown apps" switch that opens and the install
+  starts on resume. About has "Check for updates" + rollback. Builds must
+  keep the same signing key (committed `debug.keystore`) to install over
   each other. Tests fake it via `fetchOverride` / `channelOverride` /
-  `prefsOverride`.
+  `prefsOverride` / `fileExistsOverride` and `CollageAppState.autoUpdateForTest`.
 
 ## Conventions
 

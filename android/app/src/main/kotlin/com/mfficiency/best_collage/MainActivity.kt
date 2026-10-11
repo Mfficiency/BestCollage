@@ -5,8 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
-import androidx.core.content.FileProvider
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,9 +17,9 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        // In-app updates (lib/src/services/update_service.dart), same as
-        // BestToDo: download the APK with DownloadManager, then hand it to
-        // the system package installer.
+        // In-app updates (lib/src/services/update_service.dart): download the
+        // APK with DownloadManager, then install it through a PackageInstaller
+        // session.
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "bestcollage/update",
@@ -51,11 +53,16 @@ class MainActivity : FlutterActivity() {
                         val destFile = File(destDir, fileName)
                         val downloadManager =
                             getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                        // Silent: the automatic background download shows no
+                        // notification (DOWNLOAD_WITHOUT_NOTIFICATION); the app
+                        // asks once the APK is complete.
+                        val silent = call.argument<Boolean>("silent") == true
                         val request = DownloadManager.Request(Uri.parse(url))
                             .setTitle("BestCollage update")
                             .setDestinationUri(Uri.fromFile(destFile))
                             .setNotificationVisibility(
-                                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                                if (silent) DownloadManager.Request.VISIBILITY_HIDDEN
+                                else DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
                             )
                             .setAllowedNetworkTypes(
                                 DownloadManager.Request.NETWORK_WIFI or
@@ -159,22 +166,23 @@ class MainActivity : FlutterActivity() {
                         result.success("needs-permission")
                         return@setMethodCallHandler
                     }
-                    try {
-                        val uri = FileProvider.getUriForFile(
-                            this, "$packageName.fileprovider", File(path)
-                        )
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/vnd.android.package-archive")
-                            addFlags(
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                    Intent.FLAG_ACTIVITY_NEW_TASK
-                            )
+                    // A PackageInstaller session (ApkInstaller.kt): Android
+                    // shows only "Update this app?". Copying the APK into the
+                    // session blocks, so it runs off the main thread.
+                    val main = Handler(Looper.getMainLooper())
+                    Thread {
+                        val error = try {
+                            ApkInstaller.install(applicationContext, File(path))
+                            null
+                        } catch (e: Exception) {
+                            Log.w("ApkInstaller", "install failed", e)
+                            e.message ?: e.toString()
                         }
-                        startActivity(intent)
-                        result.success("ok")
-                    } catch (e: Exception) {
-                        result.error("install-failed", e.message, null)
-                    }
+                        main.post {
+                            if (error == null) result.success("ok")
+                            else result.error("install-failed", error, null)
+                        }
+                    }.start()
                 }
                 else -> result.notImplemented()
             }

@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.0] - 2026-10-11
+- Updates download quietly in the background: no question first, no notification. When the new version is completely downloaded the app asks once whether to install it now (Later keeps a small 'ready to install' banner). Install goes straight to Android's own 'Update this app?' dialog, nothing in between. Nothing installs without your tap, and a finished download survives closing the app
+
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
 

@@ -125,6 +125,15 @@ class _UpdateSectionState extends State<UpdateSection> {
           : '';
     });
     try {
+      // Already downloaded in the background: install it right away.
+      final earlier = await UpdateService.instance.readyApk(info.version);
+      if (earlier != null) {
+        if (!mounted) return;
+        _apkPath = earlier;
+        setState(() => _phase = _UpdatePhase.readyToInstall);
+        await _install();
+        return;
+      }
       await for (final progress
           in UpdateService.instance.downloadInBackground(info)) {
         if (!mounted) return;

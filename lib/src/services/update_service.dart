@@ -151,6 +151,9 @@ class UpdateService {
   /// Test seam: replaces SharedPreferences for the download bookkeeping.
   Map<String, String>? prefsOverride;
 
+  /// Test seam: replaces the check that a downloaded APK is still on disk.
+  bool Function(String path)? fileExistsOverride;
+
   /// Numeric components of a version string: `0.1.74+45` → [0, 1, 74, 45].
   /// Unparseable strings ("unknown" in tests) yield [] and compare as zero.
   static List<int> versionNumbers(String version) => RegExp(r'\d+')
@@ -270,10 +273,10 @@ class UpdateService {
 
   static const String _pendingKey = 'update_pending_download';
 
-  /// Version whose APK was last downloaded and handed to the installer, so a
-  /// later poll (or a fresh launch) doesn't ask to download it again. Stops
+  /// `{version, path}` of the last completely downloaded APK, so a later poll
+  /// (or a fresh launch) installs it without downloading again. Stops
   /// mattering once that version is installed — it's no longer "newer".
-  static const String _downloadedKey = 'update_downloaded_version';
+  static const String _downloadedKey = 'update_downloaded_apk';
 
   Future<String?> _getPref(String key) async {
     final o = prefsOverride;
@@ -292,13 +295,15 @@ class UpdateService {
   }
 
   /// Hands [info]'s APK to Android's `DownloadManager` and returns its id.
-  Future<int> startBackgroundDownload(UpdateInfo info) async {
+  /// A [silent] download shows no notification (the automatic one).
+  Future<int> startBackgroundDownload(UpdateInfo info,
+      {bool silent = false}) async {
     final url = info.apkUrl;
     if (url == null) throw StateError('This build has no APK to download');
     final fileName =
         'BestCollage-update-${info.version.replaceAll('+', '-')}.apk';
-    final result = await _invoke(
-        'startBackgroundDownload', {'url': url, 'fileName': fileName});
+    final result = await _invoke('startBackgroundDownload',
+        {'url': url, 'fileName': fileName, 'silent': silent});
     return (result as Map)['downloadId'] as int;
   }
 
@@ -338,15 +343,18 @@ class UpdateService {
   Stream<DownloadProgress> downloadInBackground(
     UpdateInfo info, {
     Duration interval = const Duration(milliseconds: 700),
+    bool silent = false,
   }) async* {
-    final id = await startBackgroundDownload(info);
-    LogService.add('update', 'downloading ${info.version} (id $id)');
+    final id = await startBackgroundDownload(info, silent: silent);
+    LogService.add('update',
+        'downloading ${info.version} (id $id${silent ? ', silent' : ''})');
     await _setPref(
         _pendingKey, jsonEncode({'downloadId': id, 'version': info.version}));
     await for (final progress in watchDownload(id, interval: interval)) {
       yield progress;
       if (progress.status == DownloadStatus.successful) {
-        await markVersionDownloaded(info.version);
+        final path = progress.localPath;
+        if (path != null) await markVersionDownloaded(info.version, path);
         await clearPendingDownload();
       } else if (progress.status == DownloadStatus.failed) {
         LogService.add('update', 'download failed (${progress.reason})');
@@ -357,16 +365,30 @@ class UpdateService {
 
   Future<void> clearPendingDownload() => _setPref(_pendingKey, null);
 
-  Future<void> markVersionDownloaded(String version) =>
-      _setPref(_downloadedKey, version);
+  /// Records that [version]'s APK is completely downloaded at [path].
+  Future<void> markVersionDownloaded(String version, String path) =>
+      _setPref(_downloadedKey, jsonEncode({'version': version, 'path': path}));
 
-  /// True when [version] is downloading right now or was already downloaded
-  /// and handed to the installer — no need to ask about it again.
-  Future<bool> wasDownloaded(String version) async {
-    final pending = await pendingDownload();
-    if (pending != null && pending['version'] == version) return true;
-    return await _getPref(_downloadedKey) == version;
+  /// Path of [version]'s completely downloaded APK — also from before a
+  /// restart — or null when it isn't (or no longer is) on disk.
+  Future<String?> readyApk(String version) async {
+    final raw = await _getPref(_downloadedKey);
+    if (raw == null) return null;
+    try {
+      final saved = jsonDecode(raw) as Map<String, dynamic>;
+      final path = saved['path'] as String?;
+      if (saved['version'] != version || path == null) return null;
+      final exists = fileExistsOverride ?? (p) => File(p).existsSync();
+      return exists(path) ? path : null;
+    } catch (_) {
+      return null;
+    }
   }
+
+  /// True when [version] is downloading right now (possibly started by an
+  /// earlier run).
+  Future<bool> isDownloading(String version) async =>
+      (await pendingDownload())?['version'] == version;
 
   /// A download an earlier app run started but didn't see finish, as
   /// `{downloadId, version}`; null when there is none.
@@ -380,10 +402,11 @@ class UpdateService {
     }
   }
 
-  /// Hands the downloaded APK to the Android package installer. Returns "ok"
-  /// when the install screen opened, or "needs-permission" when the app must
-  /// first be allowed to install apps (that settings screen is opened for
-  /// the user; install again afterwards).
+  /// Installs the downloaded APK through a PackageInstaller session (Android
+  /// then shows only "Update this app?"). Returns "ok" when the session was
+  /// committed, or "needs-permission" when the app must first be allowed to
+  /// install apps (that settings screen is opened for the user; install
+  /// again afterwards).
   Future<String> installApk(String path) async {
     LogService.add('update', 'installing $path');
     final result = await _invoke('installApk', {'path': path});
