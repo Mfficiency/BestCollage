@@ -10,13 +10,33 @@ plugins {
 
 // Optional real release key: android/key.properties (untracked) with
 // storeFile/storePassword/keyAlias/keyPassword. Without it, release builds are
-// signed with the committed debug.keystore so every machine (and CI) produces
-// APKs that install over each other.
+// signed with android/app/debug.keystore — the app's one stable signing key.
+// It is NOT in git (public repo; **/*.keystore is ignored): it lives in the
+// local working copy and the laptop builder copies it into its clones, and
+// `tool/build.ps1 release` refuses to build without it. Without that file a
+// build would be signed with a different key and could not update installs.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 val hasReleaseKeystore = keystorePropertiesFile.exists()
 if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
+// Release channel (set by the laptop builder / tool/build.ps1 release): each
+// branch is its own app so dev, staging and main install side by side.
+// Unset (flutter run, CI tests) = main = the base app id.
+val buildChannel = (System.getenv("BUILD_CHANNEL") ?: "").trim().lowercase()
+    .ifEmpty { "main" }
+val channelIdSuffix = when (buildChannel) {
+    "main" -> ""
+    "dev", "staging" -> ".$buildChannel"
+    else -> throw GradleException(
+        "BUILD_CHANNEL must be main, staging or dev (got '$buildChannel')")
+}
+val channelLabel = when (buildChannel) {
+    "dev" -> "BestCollage Dev"
+    "staging" -> "BestCollage Staging"
+    else -> "BestCollage"
 }
 
 android {
@@ -52,6 +72,10 @@ android {
 
     defaultConfig {
         applicationId = "com.mfficiency.best_collage"
+        if (channelIdSuffix.isNotEmpty()) {
+            applicationIdSuffix = channelIdSuffix
+        }
+        manifestPlaceholders["appLabel"] = channelLabel
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

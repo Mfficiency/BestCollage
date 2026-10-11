@@ -36,10 +36,11 @@ class AppConfig {
       'originals are never changed.\n\n'
       'No ads, no tracking, no accounts. Photos never leave your phone.';
 
-  /// Opened by the About page's "Update app" button. Point it at your store
-  /// listing (Play Store, App Store) or a download page.
+  /// Opened by the About page's "Update app" button off Android: the GitHub
+  /// releases the laptop builder publishes (every channel; the in-app check
+  /// itself only looks at this build's own channel).
   static const String updateUrl =
-      'https://github.com/Mfficiency/BestCollage/tree/dev/github_releases';
+      'https://github.com/Mfficiency/BestCollage/releases';
 
   // --- Theme ----------------------------------------------------------------
 

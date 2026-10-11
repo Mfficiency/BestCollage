@@ -1,10 +1,21 @@
 # Changelog
 
-## [0.4.0] - 2026-10-11
-- Updates download quietly in the background: no question first, no notification. When the new version is completely downloaded the app asks once whether to install it now (Later keeps a small 'ready to install' banner). Install goes straight to Android's own 'Update this app?' dialog, nothing in between. Nothing installs without your tap, and a finished download survives closing the app
-
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
+
+## [0.4.1] - 2026-10-11
+- Dev, staging and main are now three separate apps — BestCollage Dev,
+  BestCollage Staging and BestCollage — that install side by side. Each one
+  only updates itself from its own channel, and About shows the channel next
+  to the version.
+- Updates now come from the GitHub releases the laptop publishes for every
+  push to dev, staging and main (instead of the github_releases/ folder);
+  "Go back" offers the channel's previous release.
+- Update checks run every 15 minutes (instead of every minute) and simply
+  try again later when GitHub is busy.
+
+## [0.4.0] - 2026-10-11
+- Updates download quietly in the background: no question first, no notification. When the new version is completely downloaded the app asks once whether to install it now (Later keeps a small 'ready to install' banner). Install goes straight to Android's own 'Update this app?' dialog, nothing in between. Nothing installs without your tap, and a finished download survives closing the app
 
 ## [0.3.2] - 2026-10-11
 - App icon: the logo image exactly as designed — no tile, no rounded

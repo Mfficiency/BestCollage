@@ -53,11 +53,11 @@ enum _UpdatePhase {
   error,
 }
 
-/// "Check for updates" → the two APKs kept in the repo's `github_releases/`
-/// folder → download one (in the background, with a progress bar) → hand it
-/// to the Android installer. The main button takes the newest build; a second
-/// one reinstalls the build kept for a rollback. Off Android the buttons open
-/// the folder in the browser instead.
+/// "Check for updates" → this channel's GitHub releases → download one (in
+/// the background, with a progress bar) → hand it to the Android installer.
+/// The main button takes the newest build; a second one reinstalls the
+/// channel's previous release (rollback). Off Android the buttons open the
+/// releases page in the browser instead.
 class UpdateSection extends StatefulWidget {
   const UpdateSection({super.key});
 
@@ -98,7 +98,9 @@ class _UpdateSectionState extends State<UpdateSection> {
       if (!mounted) return;
       setState(() {
         _phase = _UpdatePhase.error;
-        _note = 'Update check failed: $e';
+        _note = e is UpdateRateLimitedException
+            ? e.toString()
+            : 'Update check failed: $e';
       });
     }
   }

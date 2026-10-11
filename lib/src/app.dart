@@ -117,14 +117,14 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     }
     // Finished while the app was in the background: ask now.
     _askWhenReady();
-    // Re-check as soon as the app comes back, not on the next minute tick.
+    // Re-check when the app comes back, if the last check is 15+ min old.
     if (_settings.autoUpdateCheckEnabled) {
-      unawaited(AutoUpdateChecker.instance.checkOnce(_onUpdateFound));
+      unawaited(AutoUpdateChecker.instance.checkIfDue(_onUpdateFound));
     }
   }
 
   /// Settings → Updates → "Automatically check for updates" (on by default):
-  /// poll every minute while the app is open.
+  /// poll every 15 minutes while the app is open.
   void _syncAutoUpdate() {
     final checker = AutoUpdateChecker.instance;
     if (_settings.autoUpdateCheckEnabled && !checker.isRunning) {
@@ -134,8 +134,7 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     }
   }
 
-  void _onUpdateFound(UpdateInfo info) =>
-      unawaited(_downloadSilently(info));
+  void _onUpdateFound(UpdateInfo info) => unawaited(_downloadSilently(info));
 
   /// A newer build found by a check: download it without any dialog or
   /// notification, then ask ([_askWhenReady]).
@@ -254,8 +253,8 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
       final outcome = await UpdateService.instance.installApk(ready.path);
       if (outcome == 'needs-permission') _installOnResume = true;
     } catch (e) {
-      _messengerKey.currentState?.showSnackBar(
-          SnackBar(content: Text('Install failed: $e')));
+      _messengerKey.currentState
+          ?.showSnackBar(SnackBar(content: Text('Install failed: $e')));
     }
     // Cancelled in Android's dialog or failed: the banner stays.
     _showReadyBanner(ready.version);

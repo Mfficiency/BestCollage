@@ -57,7 +57,8 @@ class AppDrawer extends StatelessWidget {
             child: FutureBuilder<void>(
               future: AppVersion.ensureLoaded(),
               builder: (context, _) => Text(
-                '${AppConfig.appName} v${AppVersion.versionWithBuild}',
+                '${AppConfig.appName} v${AppVersion.versionWithBuild}'
+                '${AppVersion.channelSuffix}',
                 key: const Key('drawer-version'),
                 style: TextStyle(color: scheme.onPrimary, fontSize: 18),
               ),

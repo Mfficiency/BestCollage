@@ -54,8 +54,8 @@ class AppSettings extends ChangeNotifier {
   bool dateStampByDefault = false;
 
   // --- Updates --------------------------------------------------------------
-  /// Poll GitHub every minute while the app is open and offer to download and
-  /// install a newer build the moment one appears (Android only).
+  /// Poll GitHub every 15 minutes while the app is open and offer to download
+  /// and install a newer build of this channel (Android only).
   bool autoUpdateCheckEnabled = true;
 
   // --- Notifications --------------------------------------------------------

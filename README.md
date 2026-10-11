@@ -27,16 +27,38 @@ flutter run                 # phone or -d windows
 
 ## Build & ship
 
+Every push to `dev`, `staging` or `main` is built on the laptop
+(`tool\build.ps1 release`, triggered by `.github/workflows/laptop-build.yml`)
+and published as a [GitHub release](https://github.com/Mfficiency/BestCollage/releases):
+
+| branch | app | release tag |
+|---|---|---|
+| main | BestCollage (`com.mfficiency.best_collage`) | `v<x.y.z>-<build>` |
+| staging | BestCollage Staging (`….staging`) | `v<x.y.z>-<build>-staging` (prerelease) |
+| dev | BestCollage Dev (`….dev`) | `v<x.y.z>-<build>-dev` (prerelease) |
+
+The three apps install side by side and each updates itself only from its
+own channel's releases. Build a channel APK locally without publishing:
+
+```powershell
+$env:BUILD_CHANNEL = 'dev'; $env:BUILD_NUMBER = '12345'
+powershell -ExecutionPolicy Bypass -File tool\build.ps1 release   # -> build/channel/
+```
+
+APKs are signed with `android/app/debug.keystore`, which is kept out of git
+(this repo is public); the laptop builder copies it in, and `release` refuses
+to build without it.
+
+Manual full build (APK + Windows exe):
+
 ```sh
 powershell -ExecutionPolicy Bypass -File tool\build.ps1 all --release
 # or: sh tool/build.sh all --release
 ```
 
-Builds the APK and the Windows exe, copies the APK to
-`github_releases/best_collage_<version>.apk` (newest 2 kept), records build
-time and size in `build_history.json` and `CHANGELOG.md`, then commits and
-pushes. On this PC the "BestTodo Dev Build Watch" scheduled task runs that
-every 10 minutes whenever `origin/dev` has new commits.
+Copies the APK to the legacy `github_releases/` folder (newest 2 kept; only
+installs from before 0.4.1 read it), records build time and size in
+`build_history.json` and `CHANGELOG.md`, then commits and pushes.
 
 Bump the version with `dart run tool/bump_version.dart <x.y.z+build> "<entry>"`.
 

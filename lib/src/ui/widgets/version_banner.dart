@@ -41,8 +41,9 @@ class VersionBanner extends StatelessWidget {
           future: AppVersion.ensureLoaded(),
           builder: (context, _) => Text(
             detailed
-                ? 'v${AppVersion.versionWithBuild}  ·  $mode'
-                : 'v${AppVersion.versionWithBuild}',
+                ? 'v${AppVersion.versionWithBuild}${AppVersion.channelSuffix}'
+                    '  ·  $mode'
+                : 'v${AppVersion.versionWithBuild}${AppVersion.channelSuffix}',
             key: const Key('version-text'),
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),

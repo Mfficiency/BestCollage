@@ -311,7 +311,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             title: const Text('Automatically check for updates'),
             subtitle: const Text(
-                'Checks for a newer version every minute while the app is '
+                'Checks for a newer version every 15 minutes while the app is '
                 'open and downloads it quietly in the background; when it is '
                 'ready the app asks to install it. Nothing installs without '
                 'your tap. About → Check for updates always works.'),

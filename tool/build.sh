@@ -5,6 +5,9 @@
 #   sh tool/build.sh windows --release
 #   sh tool/build.sh all --release   # APK + exe, stage, record, commit, push
 #
+# The laptop builder's "release" mode (channel APK + GitHub release) only
+# exists in tool/build.ps1.
+#
 # SYNC=0 (no git), PUSH=0 (commit only), WINDOWS=0 / ANDROID=0 (skip a target),
 # REQUIRE_WINDOWS=1 (a failing Windows build aborts instead of warning).
 set -eu
@@ -12,6 +15,11 @@ cd "$(dirname "$0")/.."
 
 target="${1:-apk}"
 [ $# -gt 0 ] && shift
+
+if [ "$target" = "release" ]; then
+  echo "release mode (laptop channel builds) is in tool/build.ps1: powershell -NoProfile -ExecutionPolicy Bypass -File tool/build.ps1 release" >&2
+  exit 64
+fi
 
 timed_build() {
   t="$1"; shift

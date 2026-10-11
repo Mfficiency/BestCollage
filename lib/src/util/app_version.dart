@@ -20,6 +20,22 @@ class AppVersion {
   static String get versionWithBuild =>
       _build.isEmpty ? _version : '$_version+$_build';
 
+  /// Release channel this build belongs to: `main`, `staging` or `dev`
+  /// (`--dart-define=BUILD_CHANNEL=...`, set by `tool/build.ps1 release`).
+  /// Unset (local `flutter run`, tests) means `main`. Each channel is its own
+  /// Android app and only updates from its own channel's GitHub releases.
+  static const String channel =
+      String.fromEnvironment('BUILD_CHANNEL', defaultValue: 'main');
+
+  /// Build number compiled in by the laptop builder
+  /// (`--dart-define=BUILD_NUMBER=...`); 0 when not set, in which case the
+  /// platform's build number (pubspec) is used.
+  static const int compiledBuildNumber =
+      int.fromEnvironment('BUILD_NUMBER', defaultValue: 0);
+
+  /// ` · dev` / ` · staging` after a version line; empty on `main`.
+  static String get channelSuffix => channel == 'main' ? '' : '  ·  $channel';
+
   /// Whether this is a debug/profile build (vs a release `--release` build).
   static const bool isDev = !bool.fromEnvironment('dart.vm.product');
 
@@ -30,7 +46,8 @@ class AppVersion {
     try {
       final info = await PackageInfo.fromPlatform();
       _version = info.version;
-      _build = info.buildNumber;
+      _build =
+          compiledBuildNumber > 0 ? '$compiledBuildNumber' : info.buildNumber;
     } catch (_) {
       // Platform channel absent (pure unit tests): keep the defaults.
     }
