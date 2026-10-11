@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Transparent: launchers show only the mark, no circle behind it. -->
-    <color name="ic_launcher_background">#00000000</color>
+    <!-- The logo image's white, behind the adaptive icon foreground. -->
+    <color name="ic_launcher_background">#FFFFFFFF</color>
 </resources>

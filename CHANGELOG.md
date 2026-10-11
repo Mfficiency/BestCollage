@@ -3,6 +3,10 @@
 Newest version first. `dart run tool/bump_version.dart <version> "<entry>"`
 prepends a new section here and updates pubspec.yaml — keep this order.
 
+## [0.3.2] - 2026-10-11
+- App icon: the logo image exactly as designed — no tile, no rounded
+  corners. Android 13 themed icons use the mark on its own.
+
 ## [0.3.1] - 2026-10-07
 - App icon: the logo as designed — black on a white rounded square — on
   every launcher, without a circle around it. Android 13 themed icons use the
