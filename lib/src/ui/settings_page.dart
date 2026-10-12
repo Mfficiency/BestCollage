@@ -2,7 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../app_settings.dart';
-import '../services/auto_update_checker.dart';
+import '../services/app_updates.dart';
 import '../services/backup_service.dart';
 import '../util/date_time_format.dart';
 import 'subpage_app_bar.dart';
@@ -59,6 +59,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _SearchEntry('Date format', 0, 'display day month year'),
     _SearchEntry('Export size', 1, 'resolution pixels quality save picture'),
     _SearchEntry('Date stamp on new collages', 1, 'date taken show default'),
+    _SearchEntry('Check for updates', 2,
+        'update upgrade new version install apk download latest'),
     _SearchEntry('Automatically check for updates', 2,
         'update upgrade new version install apk download'),
     _SearchEntry('Export everything', 3, 'backup save json data settings'),
@@ -305,35 +307,46 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       );
 
-  Widget _updatesSection() => SettingsSection(
-        sectionKey: _sectionKeys[2],
-        title: 'Updates',
-        children: [
-          SwitchListTile(
-            title: const Text('Automatically check for updates'),
-            subtitle: ListenableBuilder(
-              listenable: AutoUpdateChecker.instance,
-              builder: (context, _) {
-                final checker = AutoUpdateChecker.instance;
-                final downloading = checker.downloadingVersion;
-                final fraction = checker.downloadFraction;
-                return Text([
-                  'Checks for a newer version every 15 minutes while the app '
-                      'is open and downloads it silently in the background; '
-                      'when it is complete Android asks "Update this app?". '
-                      'Nothing installs without your tap. About → Check for '
-                      'updates always works.',
-                  if (downloading != null)
-                    'Downloading $downloading…'
-                        '${fraction != null ? ' ${(fraction * 100).round()}%' : ''}',
-                ].join('\n'));
-              },
-            ),
-            value: _s.autoUpdateCheckEnabled,
-            onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
-          ),
-        ],
-      );
+  Widget _updatesSection() {
+    final updates = AppUpdates.instance;
+    final controller = updates.controller;
+    return SettingsSection(
+      sectionKey: _sectionKeys[2],
+      title: 'Updates',
+      children: [
+        // Checks now; a newer build downloads silently and Android asks
+        // "Update this app?" when it is complete. Progress as the subtitle.
+        ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            final busy = controller.checking.value;
+            return ListTile(
+              key: const Key('settings.update.check'),
+              title: Text(controller.checkTileTitle(context)),
+              subtitle: Text(controller.checkTileSubtitle(context)),
+              trailing: busy
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+              onTap: busy ? null : () => updates.checkNow(context),
+            );
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Automatically check for updates'),
+          subtitle: const Text(
+              'Checks for a newer version every 15 minutes while the app is '
+              'open and downloads it silently in the background; when it is '
+              'complete Android asks "Update this app?". Nothing installs '
+              'without your tap. Check for updates always works.'),
+          value: _s.autoUpdateCheckEnabled,
+          onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
+        ),
+      ],
+    );
+  }
 
   Widget _dataSection() => SettingsSection(
         sectionKey: _sectionKeys[3],

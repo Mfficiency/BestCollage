@@ -41,7 +41,9 @@ All three are the same app (BestCollage, `com.mfficiency.best_collage`);
 the version line in the app shows which branch the installed build came
 from. The build number is the minutes since 2020-01-01 UTC of the built
 commit's committer time, and the app updates itself to the release with the
-highest build number of any channel. Build a channel APK locally without
+highest build number of any channel (the shared `mfficiency_updates` package
+in `packages/`, vendored from flutter_app_template: silent download, then
+Android's own install dialog). Build a channel APK locally without
 publishing:
 
 ```powershell
