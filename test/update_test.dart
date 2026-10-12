@@ -171,7 +171,6 @@ void main() {
       expect(r.channel, 'dev');
       expect(github.requests.single.toString(),
           'https://api.github.com/repos/Mfficiency/BestCollage/releases?per_page=30');
-      expect(github.headers.single['User-Agent'], 'BestCollage-update-check');
       expect(github.headers.single.containsKey('Authorization'), isFalse,
           reason: 'public repo, no token');
     });
@@ -193,35 +192,24 @@ void main() {
     });
   });
 
-  group('GitHub rate limit', () {
-    test('a 403/429 pauses the automatic checks for 30 minutes', () async {
-      final u = await makeUpdates(phone: false);
-      github.status = 403;
-      expect((await u.controller.check()).status, UpdateStatus.failed);
-      expect(u.rateLimited, isTrue);
-      expect(u.controller.statusLabel(const UpdateStrings()),
-          isNot(contains('try again later')),
-          reason: 'the default strings know nothing of it');
-      expect(github.requests, hasLength(1));
-
-      github.status = 200;
-      // The poll: refused without a request.
-      expect((await u.controller.check()).status, UpdateStatus.failed);
-      expect(github.requests, hasLength(1));
-
-      // Asked for (pull-down): goes out.
-      await u.refresh();
-      expect(github.requests, hasLength(2));
-      expect(u.controller.result.value?.status, UpdateStatus.available);
-
-      github.status = 429;
-      await u.controller.check();
-      expect(github.requests, hasLength(3));
-      now = now.add(const Duration(minutes: 31));
-      github.status = 200;
-      await u.controller.check();
-      expect(github.requests, hasLength(4), reason: 'the pause is over');
-      expect(u.rateLimited, isFalse);
+  group('the package\'s behaviour, configured', () {
+    // Resume checks, the rate-limit pause, the switch, APK-less releases,
+    // User-Agent and the channel order are the package's (tested there);
+    // these only check what BestCollage hands it.
+    test('config: repo, tags, poll, switch, defaults kept', () async {
+      final u = await makeUpdates();
+      final c = u.controller.config;
+      expect(c.githubRepo, 'Mfficiency/BestCollage');
+      expect(c.tagPrefix, 'v');
+      expect(c.pollInterval, const Duration(minutes: 15));
+      expect(c.checkInterval, const Duration(minutes: 15));
+      expect(c.autoCheckChanges, same(AppSettings.instance));
+      expect(c.checkOnResume, isTrue);
+      expect(c.requireApk, isTrue);
+      expect(c.strictTags, isFalse);
+      expect(c.rateLimitPause, const Duration(minutes: 30));
+      expect(c.httpUserAgent, 'BestCollage-update-check');
+      expect(AppUpdates.strings.rateLimited, const UpdateStrings().rateLimited);
     });
 
     testWidgets('the status says try again later', (tester) async {

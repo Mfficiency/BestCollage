@@ -47,7 +47,7 @@ class _ChangelogPageState extends State<ChangelogPage> {
           return RefreshIndicator(
             // The same check as the automatic one: a newer build downloads
             // silently and Android's installer opens when it is complete.
-            onRefresh: AppUpdates.instance.refresh,
+            onRefresh: AppUpdates.instance.controller.refresh,
             child: ListView(
               key: const Key('changelog.list'),
               physics: const AlwaysScrollableScrollPhysics(),

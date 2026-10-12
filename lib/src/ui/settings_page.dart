@@ -308,8 +308,7 @@ class _SettingsPageState extends State<SettingsPage> {
       );
 
   Widget _updatesSection() {
-    final updates = AppUpdates.instance;
-    final controller = updates.controller;
+    final controller = AppUpdates.instance.controller;
     return SettingsSection(
       sectionKey: _sectionKeys[2],
       title: 'Updates',
@@ -330,7 +329,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : null,
-              onTap: busy ? null : () => updates.checkNow(context),
+              onTap: busy ? null : () => controller.checkNow(context),
             );
           },
         ),
