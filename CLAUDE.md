@@ -25,7 +25,8 @@ technical pages.
   others. Nothing else is committed. A HEAD that only changes
   `github_releases/` builds the commit below it with that commit's build
   number (released already → nothing to do; a failed release or a push the
-  APK commit was rebased onto → built then). All channels are ONE app
+  APK commit was rebased onto → built then).
+  Before building, `build.ps1 release` compares the source with the newest 20 releases of that app, on every channel (`Find-ReleaseWithSameCode`: a fingerprint of all tracked files except the APK folders, screenshots, `.github/`, build history, test report and build-time changelog lines); the same code released already (a dev → staging → main merge) builds and publishes nothing, so the phone is never offered the same update twice. `FORCE_RELEASE=1` skips that check. All channels are ONE app
   (`com.mfficiency.best_collage`, "BestCollage"); the channel only shows in
   the tag and next to the in-app version (`· dev`). Without
   `PUBLISH=1` it only builds (into `github_releases/<channel>/`, not
