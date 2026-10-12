@@ -93,6 +93,8 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
         if (_failedVersion == info.version) _failedVersion = null;
         _onUpdateFound(info);
       };
+      // The Changelog status card's Install.
+      AutoUpdateChecker.instance.onInstall = _installFromChangelog;
       _syncAutoUpdate();
       // A download from an earlier run may have kept going (or finished)
       // while the app was closed — it runs as an Android system service.
@@ -104,7 +106,9 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
     WidgetsBinding.instance.removeObserver(this);
-    AutoUpdateChecker.instance.stop();
+    AutoUpdateChecker.instance
+      ..stop()
+      ..onInstall = null;
     super.dispose();
   }
 
@@ -216,6 +220,7 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     }
     _failedVersion = null;
     _ready = (version: info.version, path: path);
+    AutoUpdateChecker.instance.readyVersion = info.version;
     _askedVersion = info.version; // tapped Install already: no dialog
     _bannerVersion = null;
     await _installReady();
@@ -261,6 +266,7 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
   void _setReady(String version, String path) {
     LogService.add('update', 'ready to install: $version');
     _ready = (version: version, path: path);
+    AutoUpdateChecker.instance.readyVersion = version;
     _askWhenReady();
   }
 
@@ -310,6 +316,16 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     }
     // Cancelled in Android's dialog or failed: the banner stays.
     _showReadyBanner(ready.version);
+  }
+
+  /// Install on the Changelog's status card: the downloaded APK, or (while
+  /// it isn't downloaded yet) download it in the foreground first.
+  void _installFromChangelog() {
+    if (_ready != null) {
+      unawaited(_installReady());
+    } else if (AutoUpdateChecker.instance.available case final info?) {
+      unawaited(_downloadAndInstall(info));
+    }
   }
 
   Future<void> _finishIntro() async {

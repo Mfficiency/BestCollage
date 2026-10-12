@@ -10,16 +10,20 @@ import 'settings_page.dart';
 import 'startup_times_page.dart';
 import 'test_results_page.dart';
 
-/// Built-in technical pages, listed after the app's own entries.
+/// Settings, listed right after Home like BestToDo's menu.
+const MenuEntry settingsMenuEntry = MenuEntry(
+    icon: Icons.settings, label: 'Settings', routeBuilder: SettingsPage.new);
+
+/// Built-in technical pages, listed after the app's own entries in BestToDo's
+/// order: Changelog · About · App Logs · Startup Times (then Test Results,
+/// which BestToDo keeps under Tools).
 const List<MenuEntry> builtInMenuEntries = [
-  MenuEntry(
-      icon: Icons.settings, label: 'Settings', routeBuilder: SettingsPage.new),
-  MenuEntry(
-      icon: Icons.info_outline, label: 'About', routeBuilder: AboutPage.new),
   MenuEntry(
       icon: Icons.receipt_long,
       label: 'Changelog',
       routeBuilder: ChangelogPage.new),
+  MenuEntry(
+      icon: Icons.info_outline, label: 'About', routeBuilder: AboutPage.new),
   MenuEntry(
       icon: Icons.article_outlined,
       label: 'App Logs',
@@ -45,7 +49,17 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final entries = [...AppConfig.customMenuEntries, ...builtInMenuEntries];
+    Widget tile(MenuEntry entry) => ListTile(
+          leading: Icon(entry.icon),
+          title: Text(entry.label),
+          subtitle: entry.subtitle == null ? null : Text(entry.subtitle!),
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => entry.routeBuilder()),
+            );
+          },
+        );
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -65,10 +79,11 @@ class AppDrawer extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.dashboard_customize_outlined),
-            title: const Text('Collage'),
+            leading: const Icon(Icons.home),
+            title: const Text('Home'),
             onTap: () => Navigator.pop(context),
           ),
+          tile(settingsMenuEntry),
           if (onOpenHistory != null)
             ListTile(
               leading: const Icon(Icons.history),
@@ -78,18 +93,8 @@ class AppDrawer extends StatelessWidget {
                 onOpenHistory!();
               },
             ),
-          for (final entry in entries)
-            ListTile(
-              leading: Icon(entry.icon),
-              title: Text(entry.label),
-              subtitle: entry.subtitle == null ? null : Text(entry.subtitle!),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => entry.routeBuilder()),
-                );
-              },
-            ),
+          for (final entry in AppConfig.customMenuEntries) tile(entry),
+          for (final entry in builtInMenuEntries) tile(entry),
         ],
       ),
     );

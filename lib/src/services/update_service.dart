@@ -439,9 +439,75 @@ class UpdateService {
 
   Future<void> clearPendingDownload() => _setPref(_pendingKey, null);
 
-  /// Records that [version]'s APK is completely downloaded at [path].
-  Future<void> markVersionDownloaded(String version, String path) =>
-      _setPref(_downloadedKey, jsonEncode({'version': version, 'path': path}));
+  /// `{version: ISO time}` of the last few completed downloads, for the
+  /// Changelog's "Downloaded …" (kept after the APK itself is installed).
+  static const String _downloadTimesKey = 'update_download_times';
+
+  /// Test seam for the clock (download and install times).
+  DateTime Function() now = DateTime.now;
+
+  /// Records that [version]'s APK is completely downloaded at [path], and
+  /// when.
+  Future<void> markVersionDownloaded(String version, String path) async {
+    await _setPref(
+        _downloadedKey, jsonEncode({'version': version, 'path': path}));
+    final times = await _downloadTimes();
+    times
+      ..remove(version)
+      ..[version] = now().toIso8601String();
+    while (times.length > 5) {
+      times.remove(times.keys.first);
+    }
+    await _setPref(_downloadTimesKey, jsonEncode(times));
+  }
+
+  Future<Map<String, String>> _downloadTimes() async {
+    try {
+      final raw = await _getPref(_downloadTimesKey);
+      if (raw == null) return {};
+      return Map<String, String>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// When the APK of [version]'s build finished downloading on this device;
+  /// null when it wasn't downloaded in-app (or too long ago).
+  Future<DateTime?> downloadedAt(String version) async {
+    final build = buildNumber(version);
+    for (final MapEntry(:key, :value) in (await _downloadTimes()).entries) {
+      if (key == version || (build > 0 && buildNumber(key) == build)) {
+        return DateTime.tryParse(value);
+      }
+    }
+    return null;
+  }
+
+  static const String _installedBuildKey = 'updates.installed_build';
+  static const String _installedAtKey = 'updates.installed_at';
+
+  /// When the running build was installed or updated on this device:
+  /// Android's `lastUpdateTime` ([AppVersion.updateTime]); elsewhere (and
+  /// in tests) the first start of this build, remembered here — call it
+  /// early on every start so that is close to the install. Null when
+  /// unknown.
+  Future<DateTime?> installedAt() async {
+    await AppVersion.ensureLoaded();
+    final current = AppVersion.versionWithBuild;
+    DateTime? firstStart;
+    try {
+      if (await _getPref(_installedBuildKey) == current) {
+        firstStart = DateTime.tryParse(await _getPref(_installedAtKey) ?? '');
+      } else {
+        firstStart = now();
+        await _setPref(_installedBuildKey, current);
+        await _setPref(_installedAtKey, firstStart.toIso8601String());
+      }
+    } catch (_) {
+      // No preferences (plain unit tests): only the platform time, if any.
+    }
+    return AppVersion.updateTime ?? firstStart;
+  }
 
   /// Path of [version]'s completely downloaded APK — also from before a
   /// restart — or null when it isn't (or no longer is) on disk.

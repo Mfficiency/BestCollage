@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.4] - 2026-10-12
+- Menu: the same order as BestToDo — Home, Settings, Previous collages, Changelog, About, App Logs, Startup Times, Test Results
+- Changelog: one card per version (the installed one has a check mark) under an update card that shows when your version was downloaded and installed, when updates were last checked, and a newer version that is ready to install. Pulling down checks right away and downloads a new version quietly in the background
+
 ## [0.4.3] - 2026-10-12
 - Dev, staging and main are one app again: BestCollage. Every build updates the same app, which installs the newest build of any branch (the version line still shows dev or staging). If you have BestCollage Dev or BestCollage Staging installed, uninstall them; they no longer get updates.
 
