@@ -94,16 +94,24 @@ APK).
   `UpdateStatusCard` (downloaded / installed / last checked, a waiting
   build), pull-down checks, tapping a version offers its download (older =
   rollback). About and Settings › Updates have "Check for updates".
+  The package's default behaviour is the app's behaviour: coming back to
+  the app checks when the last check is 15+ minutes old; GitHub's anonymous
+  limit (60/hour) — a 429, or a 403 without a token — pauses the automatic
+  checks until the reset (30 minutes if unknown) and the status says "GitHub
+  is limiting update checks right now — try again later." (pull-down and
+  Check for updates still ask); releases without an APK are skipped; equal
+  builds prefer main > staging > dev; User-Agent `BestCollage-update-check`.
   The app's side is `lib/src/services/app_updates.dart` (`AppUpdates`, set
   up in `main.dart`, started by `CollageAppState` after the first frame and
-  the intro): config, SharedPreferences store, date formats, log, and the
-  extras: the "Automatically check for updates" switch (`AppSettings`) is
-  `UpdateConfig.autoCheck` (turning it on restarts the 15-minute poll);
-  GitHub's anonymous limit (60/hour) — a 403/429 pauses the automatic checks
-  for 30 minutes and the status says "try again later" (pull-down and Check
-  for updates still ask); coming back to the app checks if the last check is
-  15+ minutes old; links off Android open through url_launcher; the update
-  state of 0.4.5 and older is carried over once (`migrateLegacyState`).
+  the intro) and holds only config: repo, tag prefix `v`, the 15-minute
+  poll, the "Automatically check for updates" switch (`AppSettings`) as
+  `autoCheck` + `autoCheckChanges` (the package starts/stops polling when it
+  flips), url_launcher as `UpdatePlatform(openUrl:)` for links off Android,
+  SharedPreferences store, date formats, log, and the update state of 0.4.5
+  and older carried over once (`migrateLegacyState` → the package's
+  `migrateLegacyUpdateState` with the app's own key parsing; it also deletes
+  the old `<external files>/updates`). No pre-install hook, no prompt gate
+  (updates only start after the intro).
   Android: nothing in the app (`MainActivity` is a plain FlutterActivity);
   the plugin brings `REQUEST_INSTALL_PACKAGES`, its install receiver and the
   `mfficiency_updates` channel. Builds must keep the same signing key (the

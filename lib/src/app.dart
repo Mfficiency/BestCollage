@@ -27,7 +27,7 @@ class CollageApp extends StatefulWidget {
   State<CollageApp> createState() => CollageAppState();
 }
 
-class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
+class CollageAppState extends State<CollageApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late bool _showIntro = widget.showIntro;
 
@@ -39,32 +39,25 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
   // packages/mfficiency_updates). Every download is silent; once the APK is
   // complete Android's own "Update this app?" is the one confirmation, and
   // a slim banner on the home screen stays if it was cancelled. Started
-  // after the first frame, and only once the intro is done.
+  // after the first frame, and only once the intro is done; from then on
+  // the package handles resume checks and the settings switch itself.
   bool _updatesStarted = false;
-  late bool _autoUpdate;
 
   @override
   void initState() {
     super.initState();
     // Rebuild (and re-theme) whenever any setting changes.
     _settings.addListener(_onSettingsChanged);
-    _autoUpdate = _settings.autoUpdateCheckEnabled;
-    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _startUpdates());
   }
 
   @override
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
-    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   void _onSettingsChanged() {
-    if (_autoUpdate != _settings.autoUpdateCheckEnabled) {
-      _autoUpdate = _settings.autoUpdateCheckEnabled;
-      if (_updatesStarted) AppUpdates.instance.autoCheckChanged();
-    }
     if (mounted) setState(() {});
   }
 
@@ -74,15 +67,7 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     final context = _navigatorKey.currentContext;
     if (_updatesStarted || _showIntro || !mounted || context == null) return;
     _updatesStarted = true;
-    AppUpdates.instance.start(context);
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Back in the app: check if the last check is 15+ minutes old.
-    if (state == AppLifecycleState.resumed && _updatesStarted) {
-      AppUpdates.instance.checkIfDue();
-    }
+    AppUpdates.instance.controller.start(context);
   }
 
   Future<void> _finishIntro() async {
