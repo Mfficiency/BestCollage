@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.7] - 2026-10-12
+- Updates behave exactly like the other Mfficiency apps (shared update module 1.1.0): when GitHub limits update checks, the automatic checks wait until GitHub says they may try again (30 minutes if it doesn't say), and a release whose APK is still uploading is no longer offered. Coming back to the app still checks when the last check is 15+ minutes old, and the "Automatically check for updates" switch takes effect right away.
+
 ## [0.4.6] - 2026-10-12
 - Updates now use the same shared update module as the other Mfficiency apps: a new version still downloads quietly in the background and Android's own "Update this app?" is the only question; cancelled, a slim banner on the home screen offers Install, and a failed download offers Try again. Downloads continue where they stopped after a lost connection. Tap a version in the Changelog to download it (an older one goes back to it); About and Settings › Updates have Check for updates. The last update you downloaded (if it wasn't installed yet) downloads once more.
 
