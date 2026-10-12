@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'src/app.dart';
 import 'src/app_settings.dart';
 import 'src/services/startup_time_service.dart';
+import 'src/services/update_service.dart';
 import 'src/util/app_version.dart';
 
 /// App entry point. The order matters:
@@ -19,6 +22,9 @@ Future<void> main() async {
 
   await AppSettings.instance.load();
   await AppVersion.ensureLoaded();
+  // Remembers the first start of this build (the Changelog's "Installed …"
+  // where the platform doesn't say).
+  unawaited(UpdateService.instance.installedAt());
 
   final prefs = await SharedPreferences.getInstance();
   // Show the intro once, and never in dev builds (so hot-restart isn't noisy).

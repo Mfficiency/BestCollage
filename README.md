@@ -31,18 +31,22 @@ Every push to `dev`, `staging` or `main` is built on the laptop
 (`tool\build.ps1 release`, triggered by `.github/workflows/laptop-build.yml`)
 and published as a [GitHub release](https://github.com/Mfficiency/BestCollage/releases):
 
-| branch | app | release tag |
-|---|---|---|
-| main | BestCollage (`com.mfficiency.best_collage`) | `v<x.y.z>-<build>` |
-| staging | BestCollage Staging (`….staging`) | `v<x.y.z>-<build>-staging` (prerelease) |
-| dev | BestCollage Dev (`….dev`) | `v<x.y.z>-<build>-dev` (prerelease) |
+| branch | release tag |
+|---|---|
+| main | `v<x.y.z>-<build>` |
+| staging | `v<x.y.z>-<build>-staging` (prerelease) |
+| dev | `v<x.y.z>-<build>-dev` (prerelease) |
 
-The three apps install side by side and each updates itself only from its
-own channel's releases. Build a channel APK locally without publishing:
+All three are the same app (BestCollage, `com.mfficiency.best_collage`);
+the version line in the app shows which branch the installed build came
+from. The build number is the minutes since 2020-01-01 UTC of the built
+commit's committer time, and the app updates itself to the release with the
+highest build number of any channel. Build a channel APK locally without
+publishing:
 
 ```powershell
 $env:BUILD_CHANNEL = 'dev'; $env:BUILD_NUMBER = '12345'
-powershell -ExecutionPolicy Bypass -File tool\build.ps1 release   # -> build/channel/
+powershell -ExecutionPolicy Bypass -File tool\build.ps1 release   # -> github_releases/dev/
 ```
 
 APKs are signed with `android/app/debug.keystore`, which is kept out of git

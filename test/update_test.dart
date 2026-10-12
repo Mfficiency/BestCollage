@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:best_collage/best_collage.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// One GitHub releases-API entry for [version] (`x.y.z+build`) on [channel].
@@ -76,7 +75,19 @@ void main() {
       expect(UpdateService.compareVersions('0.3.2+10010', '0.3.2+7'), 1);
     });
 
-    test('only the own channel counts, newest first', () {
+    test('updates compare the build number (versionCode) alone', () {
+      expect(UpdateService.buildNumber('0.4.3+3600000'), 3600000);
+      expect(UpdateService.buildNumber('0.4.3'), 0);
+      expect(UpdateService.buildNumber('unknown'), 0);
+      // A higher build wins even with a lower x.y.z (another channel).
+      expect(UpdateService.compareBuilds('0.4.2+3600010', '0.4.3+3600000'), 1);
+      expect(UpdateService.compareBuilds('0.4.3+10050', '0.4.2+3600000'), -1);
+      expect(UpdateService.compareBuilds('0.4.3+5', '0.4.2+5'), 0);
+      // Minute-based build numbers are above the old 10000 + commit count.
+      expect(UpdateService.compareBuilds('0.4.3+3600000', '0.4.2+10060'), 1);
+    });
+
+    test('every channel counts, highest build first', () {
       final list = jsonDecode(jsonEncode([
         release('0.3.3+10050', channel: 'dev'),
         release('0.3.3+10040'),
@@ -84,25 +95,28 @@ void main() {
         release('0.3.3+10048', channel: 'dev'),
         release('0.3.3+10049', channel: 'dev', draft: true),
         release('0.3.3+10051', channel: 'dev', apk: false),
+        release('0.3.2+10052', channel: 'staging'),
         release('0.3.3+10044'),
-        // A main-style tag marked prerelease is not a main release.
+        // A main-style tag marked prerelease still counts.
         release('0.3.3+10046', prerelease: true),
         {'tag_name': 'something-else', 'assets': []},
       ])) as List;
-      expect(
-          UpdateService.channelReleases(list, channel: 'dev')
-              .map((b) => b.version),
-          ['0.3.3+10050', '0.3.3+10048']);
-      expect(
-          UpdateService.channelReleases(list, channel: 'main')
-              .map((b) => b.version),
-          ['0.3.3+10044', '0.3.3+10040']);
-      final staging = UpdateService.channelReleases(list, channel: 'staging');
-      expect(staging.map((b) => b.version), ['0.3.3+10045']);
-      expect(staging.single.channel, 'staging');
-      expect(staging.single.tag, 'v0.3.3-10045-staging');
-      expect(staging.single.apkUrl, contains('v0.3.3-10045-staging'));
-      expect(staging.single.apkSizeBytes, 24 * 1024 * 1024);
+      final builds = UpdateService.releaseBuilds(list);
+      expect(builds.map((b) => b.version), [
+        '0.3.2+10052',
+        '0.3.3+10050',
+        '0.3.3+10048',
+        '0.3.3+10046',
+        '0.3.3+10045',
+        '0.3.3+10044',
+        '0.3.3+10040',
+      ]);
+      expect(builds.map((b) => b.channel),
+          ['staging', 'dev', 'dev', 'main', 'staging', 'main', 'main']);
+      final staging = builds.firstWhere((b) => b.version == '0.3.3+10045');
+      expect(staging.tag, 'v0.3.3-10045-staging');
+      expect(staging.apkUrl, contains('v0.3.3-10045-staging'));
+      expect(staging.apkSizeBytes, 24 * 1024 * 1024);
     });
   });
 
@@ -134,31 +148,59 @@ void main() {
   });
 
   group('channels', () {
-    test('a dev build never sees main or staging releases', () async {
-      UpdateService.instance.channelForTest = 'dev';
+    test('the highest build of any channel is the update', () async {
       UpdateService.instance.fetchOverride = (_) async => jsonEncode([
-            release('0.4.0+10090'),
-            release('0.4.0+10091', channel: 'staging'),
-            release('0.2.2+10020', channel: 'dev'),
-            release('0.2.2+10010', channel: 'dev'),
-            release('0.2.1+10005', channel: 'dev'),
+            release('0.4.3+3600100'),
+            release('0.4.3+3600250', channel: 'dev'),
+            release('0.4.3+3600200', channel: 'staging'),
+            release('0.4.4+3600300', channel: 'dev', draft: true),
           ]);
       final check = await UpdateService.instance
-          .checkReleases(currentVersion: '0.2.2+10010');
-      expect(check.latest!.version, '0.2.2+10020');
-      expect(check.latest!.channel, 'dev');
+          .checkReleases(currentVersion: '0.4.3+3600100');
       expect(check.hasUpdate, isTrue);
-      // Rollback: the dev release before the running one.
-      expect(check.rollback!.version, '0.2.1+10005');
+      expect(check.latest!.version, '0.4.3+3600250');
+      expect(check.latest!.channel, 'dev');
+      expect(check.latest!.tag, 'v0.4.3-3600250-dev');
+      expect(check.rollback, isNull);
     });
 
-    test('no release of the own channel means no update', () async {
-      UpdateService.instance.channelForTest = 'staging';
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.9.0+10100']);
-      final check =
-          await UpdateService.instance.checkReleases(currentVersion: '0.2.2+4');
-      expect(check.latest, isNull);
+    test('a higher build wins over a higher x.y.z', () async {
+      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
+            release('0.5.0+3600100', channel: 'dev'),
+            release('0.4.3+3600200'),
+          ]);
+      final check = await UpdateService.instance
+          .checkReleases(currentVersion: '0.4.3+3600050');
+      expect(check.latest!.version, '0.4.3+3600200');
+      expect(check.latest!.channel, 'main');
+      expect(check.hasUpdate, isTrue);
+    });
+
+    test('nothing above the installed versionCode means no update', () async {
+      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
+            // Higher x.y.z, lower build: Android would refuse it anyway.
+            release('0.9.0+3600100', channel: 'staging'),
+            release('0.4.3+3600050'),
+            release('0.4.2+3600000', channel: 'dev'),
+          ]);
+      final check = await UpdateService.instance
+          .checkReleases(currentVersion: '0.4.3+3600200');
+      expect(check.latest!.version, '0.9.0+3600100');
+      expect(check.hasUpdate, isFalse);
+      expect(await UpdateService.instance
+              .checkForUpdate(currentVersion: '0.4.3+3600200'),
+          isNull);
+      // Rollback: the highest build below the running one, any channel.
+      expect(check.rollback!.version, '0.9.0+3600100');
+    });
+
+    test('a build equal to the installed one is not an update', () async {
+      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
+            release('0.4.3+3600100', channel: 'staging'),
+            release('0.4.3+3600100'),
+          ]);
+      final check = await UpdateService.instance
+          .checkReleases(currentVersion: '0.4.3+3600100');
       expect(check.hasUpdate, isFalse);
       expect(check.rollback, isNull);
     });
@@ -450,6 +492,36 @@ void main() {
       await unmount(tester);
     });
 
+    testWidgets(
+        'pulling down on the changelog downloads a newer build silently, '
+        'then asks', (tester) async {
+      AppSettings.instance.autoUpdateCheckEnabled = false;
+      addTearDown(() => AppSettings.instance.autoUpdateCheckEnabled = true);
+      final calls = fakeUpdate();
+      await pumpApp(tester);
+      expect(calls, isEmpty, reason: 'automatic checks are off');
+
+      tester.state<NavigatorState>(find.byType(Navigator).first).push(
+          MaterialPageRoute<void>(builder: (_) => const ChangelogPage()));
+      final list = find.byKey(const Key('changelog.list'));
+      for (var i = 0; i < 50 && list.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      await tester.fling(list, const Offset(0, 400), 1000);
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(calls, containsAllInOrder(['startBackgroundDownload']));
+      expect(find.text('Update ready'), findsOneWidget);
+      await tester.tap(find.text('Later'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('· Update ready 0.3.0 (6)'), findsOneWidget);
+      expect(find.byKey(const Key('changelog.install')), findsOneWidget);
+      await unmount(tester);
+    });
+
     testWidgets('an APK downloaded before a restart is reused', (tester) async {
       final calls = fakeUpdate();
       UpdateService.instance.prefsOverride = {
@@ -531,17 +603,33 @@ void main() {
   });
 
   group('Changelog page', () {
-    Future<void> pullDown(WidgetTester tester) async {
-      AppVersion.setForTest('0.2.2', '4');
+    Future<void> openChangelog(WidgetTester tester,
+        {String version = '0.2.2', DateTime? updateTime}) async {
+      // Set in this zone: awaiting a future made in setUp never resumes here.
+      AppVersion.setForTest(version, '4', updateTime);
       await tester.pumpWidget(const MaterialApp(home: ChangelogPage()));
       // The asset loads outside the fake clock.
-      for (var i = 0; i < 50 && find.byType(Markdown).evaluate().isEmpty; i++) {
+      final list = find.byKey(const Key('changelog.list'));
+      for (var i = 0; i < 50 && list.evaluate().isEmpty; i++) {
         await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 10)));
         await tester.pump();
       }
-      await tester.fling(find.byType(Markdown), const Offset(0, 400), 1000);
+      await tester.pump();
+    }
+
+    Future<void> pullDown(WidgetTester tester) async {
+      await openChangelog(tester);
+      await tester.fling(
+          find.byKey(const Key('changelog.list')), const Offset(0, 400), 1000);
       await tester.pumpAndSettle();
+    }
+
+    String statusText(WidgetTester tester) {
+      final tile = tester.widget<ListTile>(find.descendant(
+          of: find.byKey(const Key('changelog.status')),
+          matching: find.byType(ListTile)));
+      return '${(tile.title as Text).data}\n${(tile.subtitle as Text).data}';
     }
 
     testWidgets('pulling down hands a newer build to the silent download',
@@ -554,20 +642,124 @@ void main() {
         ..dismiss('0.3.0+6');
       await pullDown(tester);
       expect(found, ['0.3.0+6'], reason: 'asked for, so even after "Later"');
-      expect(find.textContaining('Version 0.3.0+6 found'), findsOneWidget);
+      expect(statusText(tester),
+          contains('Current version 0.2.2 (4) · Update available 0.3.0 (6)'));
+      expect(statusText(tester), contains('Last checked '));
     });
 
     testWidgets('pulling down says so when up to date', (tester) async {
       UpdateService.instance.fetchOverride =
           (_) async => releasesJson(['0.2.2+4']);
-      await pullDown(tester);
-      expect(find.text('You have the newest version.'), findsOneWidget);
+      await openChangelog(tester);
+      expect(statusText(tester), contains('Not checked yet'));
+      await tester.fling(
+          find.byKey(const Key('changelog.list')), const Offset(0, 400), 1000);
+      await tester.pumpAndSettle();
+      expect(statusText(tester),
+          startsWith('Current version 0.2.2 (4) · Up to date'));
+      expect(statusText(tester),
+          contains(' · Pull down to check for updates'));
+      expect(find.byKey(const Key('changelog.install')), findsNothing);
     });
 
     testWidgets('pulling down shows a failed check', (tester) async {
       UpdateService.instance.fetchOverride = (_) async => throw 'no network';
       await pullDown(tester);
       expect(find.textContaining('Update check failed'), findsOneWidget);
+    });
+
+    testWidgets('shows when the running build was downloaded and installed',
+        (tester) async {
+      UpdateService.instance.prefsOverride = {
+        'update_download_times': '{"0.2.2+4":"2026-10-12T11:20:00.000"}',
+      };
+      await openChangelog(tester,
+          updateTime: DateTime(2026, 10, 12, 11, 25));
+      expect(statusText(tester),
+          contains('Downloaded 12.10.26 11:20 · Installed 12.10.26 11:25'));
+      expect(statusText(tester), isNot(contains('null')));
+    });
+
+    testWidgets('without the platform time, installed = first start',
+        (tester) async {
+      UpdateService.instance.now = () => DateTime(2026, 10, 12, 9, 5);
+      await openChangelog(tester);
+      final text = statusText(tester);
+      expect(text, contains('Installed 12.10.26 09:05'));
+      expect(text, isNot(contains('Downloaded')));
+      expect(UpdateService.instance.prefsOverride!['updates.installed_build'],
+          '0.2.2+4');
+    });
+
+    testWidgets('a downloaded newer build is ready to install',
+        (tester) async {
+      UpdateService.instance.prefsOverride = {
+        'update_download_times': '{"0.3.0+6":"2026-10-12T14:02:00.000"}',
+      };
+      var installs = 0;
+      AutoUpdateChecker.instance
+        ..readyVersion = '0.3.0+6'
+        ..onInstall = () => installs++;
+      await openChangelog(tester);
+      final text = statusText(tester);
+      expect(text, contains('· Update ready 0.3.0 (6)'));
+      expect(text,
+          contains('0.3.0 (6) downloaded 12.10.26 14:02 · ready to install'));
+      await tester.tap(find.byKey(const Key('changelog.install')));
+      expect(installs, 1);
+    });
+
+    testWidgets('one card per release; the installed one is checked',
+        (tester) async {
+      await openChangelog(tester, version: '0.4.3');
+      expect(find.text('0.4.3'), findsOneWidget);
+      expect(find.text('12.10.26'), findsWidgets);
+      final installed = find.byKey(const Key('changelog.installed'));
+      expect(installed, findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.ancestor(of: installed, matching: find.byType(Row)),
+              matching: find.text('0.4.3')),
+          findsOneWidget);
+    });
+  });
+
+  group('changelog parsing', () {
+    test('wrapped bullets join; build lines become notes', () {
+      final releases = parseChangelog('''# Changelog
+
+## [0.4.1] - 2026-10-11
+- Dev, staging and main
+  are three apps.
+- Local build: 2026-10-11 14:49
+- APK size: 23.9 MB
+
+Some note between sections.
+
+## [0.4.0] - 2026-10-10
+- Quiet downloads
+''');
+      expect(releases.map((r) => r.title), ['0.4.1', '0.4.0']);
+      expect(releases.first.date, '2026-10-11');
+      expect(releases.first.items, ['Dev, staging and main are three apps.']);
+      expect(releases.first.buildNotes, [
+        ('Local build', '2026-10-11 14:49'),
+        ('APK size', '23.9 MB'),
+      ]);
+      expect(releases.last.items, ['Quiet downloads']);
+    });
+
+    test('a completed download records when', () async {
+      UpdateService.instance.now = () => DateTime(2026, 10, 12, 11, 20);
+      await UpdateService.instance.markVersionDownloaded('0.3.0+6', '/x/a.apk');
+      expect(await UpdateService.instance.downloadedAt('0.3.0+6'),
+          DateTime(2026, 10, 12, 11, 20));
+      expect(await UpdateService.instance.downloadedAt('0.3.1+6'),
+          DateTime(2026, 10, 12, 11, 20),
+          reason: 'the build number is what counts');
+      expect(await UpdateService.instance.downloadedAt('0.3.0+7'), isNull);
+      expect(await UpdateService.instance.readyApk('0.3.0+6'), isNull,
+          reason: 'not on disk in a unit test');
     });
   });
 

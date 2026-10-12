@@ -38,7 +38,7 @@ class AppConfig {
 
   /// Opened by the About page's "Update app" button off Android: the GitHub
   /// releases the laptop builder publishes (every channel; the in-app check
-  /// itself only looks at this build's own channel).
+  /// looks at all of them too and takes the highest build number).
   static const String updateUrl =
       'https://github.com/Mfficiency/BestCollage/releases';
 

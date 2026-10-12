@@ -55,7 +55,7 @@ class AppSettings extends ChangeNotifier {
 
   // --- Updates --------------------------------------------------------------
   /// Poll GitHub every 15 minutes while the app is open and offer to download
-  /// and install a newer build of this channel (Android only).
+  /// and install a newer build from any channel (Android only).
   bool autoUpdateCheckEnabled = true;
 
   // --- Notifications --------------------------------------------------------
