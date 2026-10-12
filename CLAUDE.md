@@ -76,51 +76,45 @@ APK).
   `CollagePage`).
 - `collage_history_page.dart` — the "Previous collages" grid; returns the
   tapped entry to `CollagePage`, which reopens it.
-- `services/update_service.dart` + `auto_update_checker.dart` — in-app
-  updates (same flow as Hally Remote): reads the GitHub releases list of
-  Mfficiency/BestCollage (public, no auth, `/releases?per_page=30`), takes
-  the releases of every channel (main, staging, dev; prereleases included,
-  drafts not — `UpdateService.releaseBuilds`) and offers the one with the
-  highest build number when it is higher than the installed versionCode
-  (`compareBuilds`; x.y.z doesn't matter). `CollageApp`
-  polls every 15 minutes on Android (Settings → Updates; anonymous API limit
-  60/hour, a 403/429 pauses it). **Every** download is silent
-  (DownloadManager `VISIBILITY_HIDDEN`, `silent` defaults to true): the
-  poll, pull-down on the Changelog, the Changelog card's Install, About's
-  "Download & install" and rollback (`AutoUpdateChecker.onInstallVersion`),
-  the failed-download banner's Retry. No dialog, progress bar or
-  notification; while it runs only passive text says so
-  (`AutoUpdateChecker.downloadingVersion`/`downloadFraction` → Changelog
-  status card, Settings › Updates, About), and a tap that starts one shows
-  one SnackBar. When the APK is complete the app has no dialog of its own:
-  it starts the PackageInstaller session (`installApk`, `ApkInstaller.kt`,
-  `InstallReceiver`) right away, so Android's "Update this app?" is the one
-  confirmation — once per version and start, only while resumed (finished
-  in the background → on the next resume); a build the user asked for
-  opens it every time. After that a slim "Update ready · <version>" banner
-  (`auto_update_dialog.dart`) stays with Install; a failed download leaves
-  a banner with Retry. Without the "install unknown apps" switch that
-  screen opens (a SnackBar explains) and the install starts on resume.
-  Pulling down on the Changelog checks right away
-  (`AutoUpdateChecker.checkNow` → the same silent download). The Changelog
-  (`changelog_page.dart`) is one card per
-  release under `UpdateStatusCard`, which listens to `AutoUpdateChecker`
-  (`checking`, `lastCheck`, `available`, `downloadingVersion`,
-  `readyVersion`, `onInstall`) and
-  shows "Downloaded … · Installed …" (`UpdateService.downloadedAt`, stamped
-  by `markVersionDownloaded`; `installedAt` = Android's `lastUpdateTime` via
-  package_info_plus, else the first start of the build, recorded from
-  `main.dart`). The finished APK is remembered
-  (`readyApk`) and reused after a restart. Nothing installs without the
-  tap in Android's dialog. About has "Check for updates" + rollback to the highest
-  release below the running build. Builds must keep the same signing key (the local-only
-  `debug.keystore`) to install over each other. Tests fake it via
-  `fetchOverride` / `channelOverride` (the platform channel) /
-  `prefsOverride` / `fileExistsOverride` and
-  `CollageAppState.autoUpdateForTest`. The `.apk` files directly in
-  `github_releases/` are legacy (installs older than 0.4.1 read them); the
-  channel builds go into its `<channel>/` subfolders. The updater reads
-  neither — only the GitHub releases.
+- In-app updates: the shared package `packages/mfficiency_updates`
+  (vendored from flutter_app_template, **never edit it here**: change the
+  template's copy and run its `tool/sync_updates_package.sh <this folder>`;
+  `test/updates_package_vendored_test.dart` fails on a hand edit; its
+  README.md describes the flow). It reads the GitHub releases of
+  Mfficiency/BestCollage (public, no token; tag prefix `v`, every channel,
+  prereleases included, drafts not) and offers the highest build number
+  above the installed versionCode (x.y.z doesn't matter). A newer build
+  downloads **silently** into the cache (`.part`, resumed, reused after a
+  restart; no dialog, progress bar or notification); when complete Android's
+  own "Update this app?" (PackageInstaller session from the plugin) is the
+  only confirm, by itself once per build and start while in the foreground.
+  Cancelled: the slim `UpdateBanner` on the home screen (`collage_page.dart`)
+  offers Install; a failed download offers Try again. A tap that starts a
+  download shows one SnackBar. The Changelog shows the package's
+  `UpdateStatusCard` (downloaded / installed / last checked, a waiting
+  build), pull-down checks, tapping a version offers its download (older =
+  rollback). About and Settings › Updates have "Check for updates".
+  The app's side is `lib/src/services/app_updates.dart` (`AppUpdates`, set
+  up in `main.dart`, started by `CollageAppState` after the first frame and
+  the intro): config, SharedPreferences store, date formats, log, and the
+  extras: the "Automatically check for updates" switch (`AppSettings`) is
+  `UpdateConfig.autoCheck` (turning it on restarts the 15-minute poll);
+  GitHub's anonymous limit (60/hour) — a 403/429 pauses the automatic checks
+  for 30 minutes and the status says "try again later" (pull-down and Check
+  for updates still ask); coming back to the app checks if the last check is
+  15+ minutes old; links off Android open through url_launcher; the update
+  state of 0.4.5 and older is carried over once (`migrateLegacyState`).
+  Android: nothing in the app (`MainActivity` is a plain FlutterActivity);
+  the plugin brings `REQUEST_INSTALL_PACKAGES`, its install receiver and the
+  `mfficiency_updates` channel. Builds must keep the same signing key (the
+  local-only `debug.keystore`) to install over each other. Tests
+  (`test/update_test.dart`) use the package's seams: `AppUpdates.create`
+  with `MemoryUpdateStore`, `UpdateHttp.from`, an in-memory `ApkDownloader`,
+  `UpdatePlatform(supported: true)` and the `mfficiency_updates` channel
+  mocked. The `.apk` files directly in `github_releases/` are legacy
+  (installs older than 0.4.1 read them); the channel builds go into its
+  `<channel>/` subfolders. The updater reads neither — only the GitHub
+  releases.
 
 ## Conventions
 

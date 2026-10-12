@@ -1,409 +1,337 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:best_collage/best_collage.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mfficiency_updates/mfficiency_updates.dart'
+    show
+        ApkDownloader,
+        MemoryUpdateStore,
+        SharedPreferencesUpdateStore,
+        UpdateConfig,
+        UpdateHttp,
+        UpdateHttpException,
+        UpdatePlatform,
+        UpdateStrings;
+import 'package:shared_preferences/shared_preferences.dart';
+
+// In-app updates are the shared package (packages/mfficiency_updates, tested
+// there); these tests cover BestCollage's wiring around it (AppUpdates) with
+// the package's seams: an in-memory store, UpdateHttp.from for GitHub, an
+// in-memory downloader and the plugin's 'mfficiency_updates' channel mocked.
 
 /// One GitHub releases-API entry for [version] (`x.y.z+build`) on [channel].
-Map<String, dynamic> release(String version,
-    {String channel = 'main',
-    bool? prerelease,
-    bool draft = false,
-    bool apk = true}) {
+Map<String, Object?> release(String version,
+    {String channel = 'main', bool draft = false, String prefix = 'v'}) {
   final parts = version.split('+');
   final suffix = channel == 'main' ? '' : '-$channel';
-  final tag = 'v${parts[0]}-${parts[1]}$suffix';
+  final tag = '$prefix${parts[0]}-${parts[1]}$suffix';
   return {
     'tag_name': tag,
-    'prerelease': prerelease ?? channel != 'main',
+    'prerelease': channel != 'main',
     'draft': draft,
     'html_url': 'https://github.com/x/releases/tag/$tag',
     'assets': [
-      if (apk)
-        {
-          'name': 'BestCollage-${parts[0]}-${parts[1]}$suffix.apk',
-          'size': 24 * 1024 * 1024,
-          'browser_download_url': 'https://github.com/x/download/$tag/a.apk',
-        },
+      {
+        'name': 'BestCollage-${parts[0]}-${parts[1]}$suffix.apk',
+        'url': 'https://api.github.com/repos/x/releases/assets/1',
+        'browser_download_url': 'https://github.com/x/download/$tag/a.apk',
+      },
     ],
   };
 }
 
-/// A releases-API list with these `main` builds (in the given order).
-String releasesJson(List<String> versions, {String channel = 'main'}) =>
-    jsonEncode([for (final v in versions) release(v, channel: channel)]);
+/// GitHub, answered in Dart.
+class FakeGithub {
+  Object? body = const [];
+  int status = 200;
+  final requests = <Uri>[];
+  final headers = <Map<String, String>>[];
+
+  UpdateHttp get http => UpdateHttp.from((url, h, cacheFor) async {
+        requests.add(url);
+        headers.add(h);
+        if (status != 200) throw UpdateHttpException(status);
+        return body;
+      });
+}
+
+/// Downloads into memory, after [gate] when one is set.
+class FakeDownloader extends ApkDownloader {
+  final files = <String>{};
+  final names = <String>[];
+  bool fail = false;
+  Completer<void>? gate;
+
+  @override
+  Future<String?> download(Uri url, String fileName,
+      {void Function(double? fraction)? onProgress}) async {
+    names.add(fileName);
+    onProgress?.call(0.5);
+    await Future<void>.delayed(Duration.zero);
+    await gate?.future;
+    if (fail) return null;
+    files
+      ..clear()
+      ..add('/cache/$fileName');
+    return '/cache/$fileName';
+  }
+
+  @override
+  bool exists(String path) => files.contains(path);
+
+  @override
+  Future<String?> downloaded(String fileName) async =>
+      files.contains('/cache/$fileName') ? '/cache/$fileName' : null;
+
+  @override
+  Future<Uri?> signedAssetUrl(Uri assetApiUrl, String token) async => null;
+}
+
+/// The plugin's channel: records Android's install dialogs.
+class FakeNative {
+  FakeNative() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+            const MethodChannel(UpdatePlatform.channelName), (call) async {
+      calls.add(call);
+      return switch (call.method) {
+        'installApk' => 'ok',
+        'canInstallApks' => true,
+        'openUrl' => true,
+        _ => null,
+      };
+    });
+  }
+
+  final calls = <MethodCall>[];
+
+  List<String> get installs => [
+        for (final c in calls)
+          if (c.method == 'installApk') (c.arguments as Map)['path'] as String,
+      ];
+
+  void dispose() =>
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+              const MethodChannel(UpdatePlatform.channelName), null);
+}
 
 void main() {
+  late FakeGithub github;
+  late FakeDownloader downloader;
+  late FakeNative native;
+  late DateTime now;
+
+  /// The app's updates on a "phone" ([phone]) with the fakes. Call it in the
+  /// test's own zone, after [AppVersion.setForTest].
+  Future<AppUpdates> makeUpdates(
+      {bool phone = true, Map<String, Object>? stored}) async {
+    final updates = AppUpdates.create(
+      store: MemoryUpdateStore(stored),
+      http: github.http,
+      downloader: downloader,
+      platform: UpdatePlatform(supported: phone),
+      clock: () => now,
+      firstCheckDelay: Duration.zero,
+    );
+    await updates.controller.init();
+    AppUpdates.instance = updates;
+    return updates;
+  }
+
   setUp(() {
-    UpdateService.resetForTest();
-    AutoUpdateChecker.resetForTest();
-    UpdateService.instance.prefsOverride = {};
+    github = FakeGithub()..body = [release('0.2.2+4'), release('0.3.0+6')];
+    downloader = FakeDownloader();
+    native = FakeNative();
+    now = DateTime(2026, 10, 12, 11, 30);
+    AppSettings.instance.resetForTest();
     AppVersion.setForTest('0.2.2', '4');
   });
   tearDown(() {
-    UpdateService.resetForTest();
-    AutoUpdateChecker.resetForTest();
+    native.dispose();
+    AppUpdates.resetForTest();
+    AppSettings.instance.resetForTest();
     AppVersion.resetForTest();
   });
 
-  group('versions', () {
-    test('compare component by component', () {
-      expect(UpdateService.compareVersions('0.2.10+5', '0.2.9+9'), 1);
-      expect(UpdateService.compareVersions('0.2.2+4', '0.2.2+4'), 0);
-      expect(UpdateService.compareVersions('0.2.2+4', '0.2.2+5'), -1);
-      expect(UpdateService.compareVersions('1.0.0', '0.9.9+99'), 1);
-      expect(UpdateService.compareVersions('unknown', '0.0.1'), -1);
+  group('which release', () {
+    test('the highest build of any channel, whatever its x.y.z', () async {
+      github.body = [
+        release('0.3.0+6'),
+        release('0.2.9+9', channel: 'dev'),
+        release('0.3.1+8', channel: 'staging'),
+      ];
+      final u = await makeUpdates(phone: false);
+      final r = await u.controller.check();
+      expect(r.status, UpdateStatus.available);
+      expect(r.key, '0.2.9+9');
+      expect(r.channel, 'dev');
+      expect(github.requests.single.toString(),
+          'https://api.github.com/repos/Mfficiency/BestCollage/releases?per_page=30');
+      expect(github.headers.single['User-Agent'], 'BestCollage-update-check');
+      expect(github.headers.single.containsKey('Authorization'), isFalse,
+          reason: 'public repo, no token');
     });
 
-    test('tags carry version, build and channel', () {
-      final main = UpdateService.parseTag('v0.3.3-10042')!;
-      expect(main.version, '0.3.3+10042');
-      expect(main.channel, 'main');
-      final dev = UpdateService.parseTag('v0.3.3-10042-dev')!;
-      expect(dev.version, '0.3.3+10042');
-      expect(dev.channel, 'dev');
+    test('other tag prefixes and drafts are not this app', () async {
+      github.body = [
+        release('9.0.0+99', prefix: 'music-v'),
+        release('8.0.0+98', draft: true),
+        release('0.2.2+4'),
+      ];
+      final u = await makeUpdates(phone: false);
+      expect((await u.controller.check()).status, UpdateStatus.upToDate);
+    });
+
+    test('the running build (or none above it) is up to date', () async {
+      github.body = [release('0.2.2+4'), release('0.4.0+3')];
+      final u = await makeUpdates(phone: false);
+      expect((await u.controller.check()).status, UpdateStatus.upToDate);
+    });
+  });
+
+  group('GitHub rate limit', () {
+    test('a 403/429 pauses the automatic checks for 30 minutes', () async {
+      final u = await makeUpdates(phone: false);
+      github.status = 403;
+      expect((await u.controller.check()).status, UpdateStatus.failed);
+      expect(u.rateLimited, isTrue);
+      expect(u.controller.statusLabel(const UpdateStrings()),
+          isNot(contains('try again later')),
+          reason: 'the default strings know nothing of it');
+      expect(github.requests, hasLength(1));
+
+      github.status = 200;
+      // The poll: refused without a request.
+      expect((await u.controller.check()).status, UpdateStatus.failed);
+      expect(github.requests, hasLength(1));
+
+      // Asked for (pull-down): goes out.
+      await u.refresh();
+      expect(github.requests, hasLength(2));
+      expect(u.controller.result.value?.status, UpdateStatus.available);
+
+      github.status = 429;
+      await u.controller.check();
+      expect(github.requests, hasLength(3));
+      now = now.add(const Duration(minutes: 31));
+      github.status = 200;
+      await u.controller.check();
+      expect(github.requests, hasLength(4), reason: 'the pause is over');
+      expect(u.rateLimited, isFalse);
+    });
+
+    testWidgets('the status says try again later', (tester) async {
+      final u = await makeUpdates(phone: false);
+      github.status = 429;
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: UpdateStatusCard(controller: u.controller))));
+      await u.controller.check();
+      await tester.pump();
+      expect(find.textContaining('GitHub is limiting update checks'),
+          findsOneWidget);
+    });
+  });
+
+  group('stored state', () {
+    test('"Automatically check for updates" is the package\'s autoCheck',
+        () async {
+      final u = await makeUpdates();
+      expect(u.controller.config.autoCheck(), isTrue);
+      AppSettings.instance.autoUpdateCheckEnabled = false;
+      expect(u.controller.config.autoCheck(), isFalse);
       expect(
-          UpdateService.parseTag('v0.3.3-10042-staging')!.channel, 'staging');
-      expect(UpdateService.parseTag('v0.3.3'), isNull);
-      expect(UpdateService.parseTag('v0.3.3-1-beta'), isNull);
+          u.controller.downloadsSilently(const UpdateResult(
+              UpdateStatus.available,
+              version: '0.3.0',
+              build: 6,
+              url: 'https://x/a.apk')),
+          isFalse);
     });
 
-    test('build numbers compare within the same x.y.z', () {
-      expect(UpdateService.compareVersions('0.3.3+10050', '0.3.3+10049'), 1);
-      expect(UpdateService.compareVersions('0.3.2+10060', '0.3.3+10050'), -1);
-      // Laptop builds (10000+) are newer than the old github_releases builds.
-      expect(UpdateService.compareVersions('0.3.2+10010', '0.3.2+7'), 1);
+    test('the setting is on by default and survives a restart', () {
+      final s = AppSettings.instance;
+      expect(s.autoUpdateCheckEnabled, isTrue);
+      s.autoUpdateCheckEnabled = false;
+      final saved = s.toMap();
+      s.resetForTest();
+      s.applyMap(saved);
+      expect(s.autoUpdateCheckEnabled, isFalse);
     });
 
-    test('updates compare the build number (versionCode) alone', () {
-      expect(UpdateService.buildNumber('0.4.3+3600000'), 3600000);
-      expect(UpdateService.buildNumber('0.4.3'), 0);
-      expect(UpdateService.buildNumber('unknown'), 0);
-      // A higher build wins even with a lower x.y.z (another channel).
-      expect(UpdateService.compareBuilds('0.4.2+3600010', '0.4.3+3600000'), 1);
-      expect(UpdateService.compareBuilds('0.4.3+10050', '0.4.2+3600000'), -1);
-      expect(UpdateService.compareBuilds('0.4.3+5', '0.4.2+5'), 0);
-      // Minute-based build numbers are above the old 10000 + commit count.
-      expect(UpdateService.compareBuilds('0.4.3+3600000', '0.4.2+10060'), 1);
+    test('0.4.5\'s install and download times carry over, its keys go',
+        () async {
+      AppVersion.setForTest('0.4.6', '14');
+      SharedPreferences.setMockInitialValues({
+        'updates.installed_build': '0.4.6+14',
+        'updates.installed_at': '2026-10-12T11:25:00.000',
+        'update_download_times': jsonEncode({
+          '0.4.5+13': '2026-10-11T08:00:00.000',
+          '0.4.6+14': '2026-10-12T11:20:00.000',
+        }),
+        'update_downloaded_apk': '{"version":"0.4.6+14","path":"/x/a.apk"}',
+        'update_pending_download': '{"downloadId":5,"version":"0.4.6+14"}',
+        'intro_shown': true,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await AppUpdates.migrateLegacyState(prefs);
+      for (final key in AppUpdates.legacyKeys) {
+        expect(prefs.containsKey(key), isFalse, reason: key);
+      }
+      expect(prefs.getBool('intro_shown'), isTrue);
+      expect(prefs.getInt('state.updates.installedBuild'), 14);
+      expect(prefs.getString('state.updates.installedAt'),
+          '2026-10-12T11:25:00.000');
+
+      final c = UpdateController(
+        config: const UpdateConfig(
+            appName: 'BestCollage', version: '0.4.6', build: 14),
+        store: SharedPreferencesUpdateStore(prefs),
+        platform: UpdatePlatform(supported: false),
+      );
+      await c.init();
+      expect(c.installedAt.value, DateTime(2026, 10, 12, 11, 25));
+      expect(c.downloaded.value?.key, '0.4.6+14');
+      expect(c.downloaded.value?.label, '0.4.6 (14)');
+      expect(c.downloaded.value?.at, DateTime(2026, 10, 12, 11, 20));
+      c.dispose();
     });
 
-    test('every channel counts, highest build first', () {
-      final list = jsonDecode(jsonEncode([
-        release('0.3.3+10050', channel: 'dev'),
-        release('0.3.3+10040'),
-        release('0.3.3+10045', channel: 'staging'),
-        release('0.3.3+10048', channel: 'dev'),
-        release('0.3.3+10049', channel: 'dev', draft: true),
-        release('0.3.3+10051', channel: 'dev', apk: false),
-        release('0.3.2+10052', channel: 'staging'),
-        release('0.3.3+10044'),
-        // A main-style tag marked prerelease still counts.
-        release('0.3.3+10046', prerelease: true),
-        {'tag_name': 'something-else', 'assets': []},
-      ])) as List;
-      final builds = UpdateService.releaseBuilds(list);
-      expect(builds.map((b) => b.version), [
-        '0.3.2+10052',
-        '0.3.3+10050',
-        '0.3.3+10048',
-        '0.3.3+10046',
-        '0.3.3+10045',
-        '0.3.3+10044',
-        '0.3.3+10040',
-      ]);
-      expect(builds.map((b) => b.channel),
-          ['staging', 'dev', 'dev', 'main', 'staging', 'main', 'main']);
-      final staging = builds.firstWhere((b) => b.version == '0.3.3+10045');
-      expect(staging.tag, 'v0.3.3-10045-staging');
-      expect(staging.apkUrl, contains('v0.3.3-10045-staging'));
-      expect(staging.apkSizeBytes, 24 * 1024 * 1024);
-    });
-  });
-
-  group('check', () {
-    test('a newer build is an update; the older one is the rollback', () async {
-      Uri? asked;
-      UpdateService.instance.fetchOverride = (url) async {
-        asked = url;
-        return releasesJson(['0.2.2+4', '0.2.3+5']);
-      };
-      final check = await UpdateService.instance.checkReleases();
-      expect(asked.toString(), UpdateService.releasesUrl);
-      expect(asked!.path, '/repos/Mfficiency/BestCollage/releases');
-      expect(check.currentVersion, '0.2.2+4');
-      expect(check.hasUpdate, isTrue);
-      expect(check.latest!.version, '0.2.3+5');
-      // The previous build is the one running — nothing to roll back to.
-      expect(check.rollback, isNull);
-    });
-
-    test('up to date, with an older build to go back to', () async {
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.1+3', '0.2.2+4']);
-      final check = await UpdateService.instance.checkReleases();
-      expect(check.hasUpdate, isFalse);
-      expect(check.rollback!.version, '0.2.1+3');
-      expect(await UpdateService.instance.checkForUpdate(), isNull);
+    test('another build\'s old times are dropped, not carried over', () async {
+      AppVersion.setForTest('0.4.6', '14');
+      SharedPreferences.setMockInitialValues({
+        'updates.installed_build': '0.4.5+13',
+        'updates.installed_at': '2026-10-11T08:05:00.000',
+        'update_download_times': '{"0.4.5+13":"2026-10-11T08:00:00.000"}',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await AppUpdates.migrateLegacyState(prefs);
+      expect(prefs.getKeys(), isEmpty);
     });
   });
 
-  group('channels', () {
-    test('the highest build of any channel is the update', () async {
-      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
-            release('0.4.3+3600100'),
-            release('0.4.3+3600250', channel: 'dev'),
-            release('0.4.3+3600200', channel: 'staging'),
-            release('0.4.4+3600300', channel: 'dev', draft: true),
-          ]);
-      final check = await UpdateService.instance
-          .checkReleases(currentVersion: '0.4.3+3600100');
-      expect(check.hasUpdate, isTrue);
-      expect(check.latest!.version, '0.4.3+3600250');
-      expect(check.latest!.channel, 'dev');
-      expect(check.latest!.tag, 'v0.4.3-3600250-dev');
-      expect(check.rollback, isNull);
-    });
+  group('in the app', () {
+    setUp(() => CollageStore.instance = MemoryCollageStore());
 
-    test('a higher build wins over a higher x.y.z', () async {
-      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
-            release('0.5.0+3600100', channel: 'dev'),
-            release('0.4.3+3600200'),
-          ]);
-      final check = await UpdateService.instance
-          .checkReleases(currentVersion: '0.4.3+3600050');
-      expect(check.latest!.version, '0.4.3+3600200');
-      expect(check.latest!.channel, 'main');
-      expect(check.hasUpdate, isTrue);
-    });
-
-    test('nothing above the installed versionCode means no update', () async {
-      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
-            // Higher x.y.z, lower build: Android would refuse it anyway.
-            release('0.9.0+3600100', channel: 'staging'),
-            release('0.4.3+3600050'),
-            release('0.4.2+3600000', channel: 'dev'),
-          ]);
-      final check = await UpdateService.instance
-          .checkReleases(currentVersion: '0.4.3+3600200');
-      expect(check.latest!.version, '0.9.0+3600100');
-      expect(check.hasUpdate, isFalse);
-      expect(
-          await UpdateService.instance
-              .checkForUpdate(currentVersion: '0.4.3+3600200'),
-          isNull);
-      // Rollback: the highest build below the running one, any channel.
-      expect(check.rollback!.version, '0.9.0+3600100');
-    });
-
-    test('a build equal to the installed one is not an update', () async {
-      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
-            release('0.4.3+3600100', channel: 'staging'),
-            release('0.4.3+3600100'),
-          ]);
-      final check = await UpdateService.instance
-          .checkReleases(currentVersion: '0.4.3+3600100');
-      expect(check.hasUpdate, isFalse);
-      expect(check.rollback, isNull);
-    });
-  });
-
-  group('background checker', () {
-    test('reports a newer build, but not again once declined', () async {
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.2+4', '0.3.0+6']);
-      final found = <String>[];
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      expect(found, ['0.3.0+6']);
-
-      AutoUpdateChecker.instance.dismiss('0.3.0+6');
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      expect(found, ['0.3.0+6']);
-
-      // A newer one is offered again.
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.3.0+6', '0.3.1+7']);
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      expect(found, ['0.3.0+6', '0.3.1+7']);
-    });
-
-    test('rate limiting pauses the poll instead of failing', () async {
-      var clock = DateTime(2026, 10, 11, 12);
-      AutoUpdateChecker.instance.now = () => clock;
-      var calls = 0;
-      UpdateService.instance.fetchOverride = (_) async {
-        calls++;
-        throw const UpdateRateLimitedException();
-      };
-      final found = <String>[];
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      expect(calls, 1);
-      clock = clock.add(const Duration(minutes: 20));
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      expect(calls, 1, reason: 'still paused');
-      clock = clock.add(const Duration(minutes: 11));
-      UpdateService.instance.fetchOverride = (_) async {
-        calls++;
-        return releasesJson(['0.3.0+6']);
-      };
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      expect(calls, 2);
-      expect(found, ['0.3.0+6']);
-    });
-
-    test('coming back to the app checks at most every 15 minutes', () async {
-      var clock = DateTime(2026, 10, 11, 12);
-      AutoUpdateChecker.instance.now = () => clock;
-      var calls = 0;
-      UpdateService.instance.fetchOverride = (_) async {
-        calls++;
-        return releasesJson(['0.2.2+4']);
-      };
-      void ignore(UpdateInfo _) {}
-      await AutoUpdateChecker.instance.checkIfDue(ignore);
-      clock = clock.add(const Duration(minutes: 5));
-      await AutoUpdateChecker.instance.checkIfDue(ignore);
-      expect(calls, 1);
-      clock = clock.add(const Duration(minutes: 10));
-      await AutoUpdateChecker.instance.checkIfDue(ignore);
-      expect(calls, 2);
-      expect(AutoUpdateChecker.interval, const Duration(minutes: 15));
-    });
-
-    test('stays quiet when up to date or offline', () async {
-      final found = <String>[];
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.2+4']);
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      UpdateService.instance.fetchOverride = (_) async => throw 'offline';
-      await AutoUpdateChecker.instance.checkOnce((i) => found.add(i.version));
-      expect(found, isEmpty);
-    });
-  });
-
-  group('download', () {
-    test('runs through the platform channel and is remembered', () async {
-      final calls = <String>[];
-      var polls = 0;
-      UpdateService.instance.channelOverride = (method, args) async {
-        calls.add(method);
-        switch (method) {
-          case 'startBackgroundDownload':
-            expect(args['fileName'], 'BestCollage-update-0.3.0-6.apk');
-            return {'downloadId': 7};
-          case 'queryDownload':
-            expect(args['downloadId'], 7);
-            polls++;
-            return polls < 2
-                ? {'status': 'running', 'bytesDownloaded': 10, 'bytesTotal': 20}
-                : {
-                    'status': 'successful',
-                    'bytesDownloaded': 20,
-                    'bytesTotal': 20,
-                    'localPath': '/x/update.apk',
-                  };
-        }
-        return null;
-      };
-      final info = UpdateInfo(
-          version: '0.3.0+6', htmlUrl: '', apkUrl: 'https://raw/a.apk');
-      final service = UpdateService.instance
-        ..fileExistsOverride = (path) => path == '/x/update.apk';
-      final statuses = await service
-          .downloadInBackground(info, interval: Duration.zero)
-          .map((p) => p.status)
-          .toList();
-      expect(statuses, [DownloadStatus.running, DownloadStatus.successful]);
-      expect(calls.first, 'startBackgroundDownload');
-      // The finished APK is reused (also after a restart)…
-      expect(await service.readyApk('0.3.0+6'), '/x/update.apk');
-      expect(await service.readyApk('0.3.1+7'), isNull);
-      expect(await service.isDownloading('0.3.0+6'), isFalse);
-      // …unless Android cleared it meanwhile.
-      service.fileExistsOverride = (_) => false;
-      expect(await service.readyApk('0.3.0+6'), isNull);
-    });
-
-    test('the automatic download asks for no notification', () async {
-      final args = <String, dynamic>{};
-      UpdateService.instance.channelOverride = (method, a) async {
-        if (method == 'startBackgroundDownload') {
-          args.addAll(a);
-          return {'downloadId': 1};
-        }
-        return {'status': 'successful', 'localPath': '/x/a.apk'};
-      };
-      final info = UpdateInfo(
-          version: '0.3.0+6', htmlUrl: '', apkUrl: 'https://raw/a.apk');
-      await UpdateService.instance
-          .downloadInBackground(info, silent: true)
-          .drain<void>();
-      expect(args['silent'], isTrue);
-    });
-
-    test('a failed download is forgotten so it can be offered again', () async {
-      UpdateService.instance.channelOverride = (method, args) async =>
-          method == 'startBackgroundDownload'
-              ? {'downloadId': 3}
-              : {'status': 'failed', 'reason': 1006};
-      final info = UpdateInfo(
-          version: '0.3.0+6', htmlUrl: '', apkUrl: 'https://raw/a.apk');
-      final last = await UpdateService.instance
-          .downloadInBackground(info, interval: Duration.zero)
-          .last;
-      expect(last.status, DownloadStatus.failed);
-      expect(last.reason, '1006');
-      expect(await UpdateService.instance.readyApk('0.3.0+6'), isNull);
-      expect(await UpdateService.instance.pendingDownload(), isNull);
-    });
-  });
-
-  group('automatic update', () {
-    setUp(() {
-      CollageStore.instance = MemoryCollageStore();
-      CollageAppState.autoUpdateForTest = true;
-    });
-    tearDown(() => CollageAppState.autoUpdateForTest = null);
-
-    /// Fakes GitHub (0.3.0+6 is newer) and the platform channel; returns the
-    /// channel calls.
-    List<String> fakeUpdate({List<String>? installed}) {
-      final calls = <String>[];
-      UpdateService.instance
-        ..fetchOverride = ((_) async => releasesJson(['0.2.2+4', '0.3.0+6']))
-        ..fileExistsOverride = ((_) => true)
-        ..channelOverride = (method, args) async {
-          // A download that isn't silent shows up as a different call (no
-          // expect here: it may run outside the test's guarded zone).
-          calls.add(
-              method == 'startBackgroundDownload' && args['silent'] != true
-                  ? 'startBackgroundDownload (with notification)'
-                  : method);
-          switch (method) {
-            case 'startBackgroundDownload':
-              return {'downloadId': 5};
-            case 'queryDownload':
-              return {'status': 'successful', 'localPath': '/x/new.apk'};
-            case 'installApk':
-              installed?.add(args['path'] as String);
-              return 'ok';
-          }
-          return null;
-        };
-      return calls;
-    }
-
-    Future<void> pumpApp(WidgetTester tester) async {
+    Future<AppUpdates> pumpApp(WidgetTester tester,
+        {Map<String, Object>? stored}) async {
       // Set in this zone: awaiting a future made in setUp never resumes here.
       AppVersion.setForTest('0.2.2', '4');
+      final u = await makeUpdates(stored: stored);
       await tester.pumpWidget(const CollageApp(showIntro: false));
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
+      return u;
     }
 
+    /// Stops the poll (no timer may outlive the test).
     Future<void> unmount(WidgetTester tester) async {
       await tester.pumpWidget(const SizedBox());
-      AutoUpdateChecker.instance.stop();
+      AppUpdates.resetForTest();
     }
 
     /// No dialog, bottom sheet or progress of the app's own on screen.
@@ -415,17 +343,25 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     }
 
-    Future<void> resume(WidgetTester tester) async {
-      for (final s in [
-        AppLifecycleState.inactive,
-        AppLifecycleState.hidden,
-        AppLifecycleState.paused,
-        AppLifecycleState.hidden,
-        AppLifecycleState.inactive,
-        AppLifecycleState.resumed,
-      ]) {
+    void lifecycle(WidgetTester tester, List<AppLifecycleState> states) {
+      for (final s in states) {
         tester.binding.handleAppLifecycleStateChanged(s);
       }
+    }
+
+    const toBackground = [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ];
+    const toForeground = [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ];
+
+    Future<void> resume(WidgetTester tester) async {
+      lifecycle(tester, [...toBackground, ...toForeground]);
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
@@ -434,299 +370,145 @@ void main() {
     testWidgets(
         'downloads silently, then opens Android\'s install dialog directly',
         (tester) async {
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
       await pumpApp(tester);
       // No question before or after the download: Android's "Update this
       // app?" (the PackageInstaller session) is the only confirmation.
-      expect(
-          calls, containsAllInOrder(['startBackgroundDownload', 'installApk']));
-      expect(installed, ['/x/new.apk']);
+      expect(downloader.names, ['BestCollage-0.3.0-6.apk']);
+      expect(native.installs, ['/cache/BestCollage-0.3.0-6.apk']);
       expectNothingPoppedUp();
-      expect(find.text('Update ready'), findsNothing);
       await unmount(tester);
     });
 
     testWidgets(
         'cancelled: a banner stays; not opened again by itself this start',
         (tester) async {
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
       await pumpApp(tester);
-      expect(installed, hasLength(1));
+      expect(native.installs, hasLength(1));
       // The user cancelled Android's dialog: the slim banner is left.
-      expect(find.text('Update ready · 0.3.0+6'), findsOneWidget);
+      expect(find.text('Update ready · 0.3.0 (6)'), findsOneWidget);
 
-      // Coming back to the app checks again: no new download, no new
-      // install dialog.
       await resume(tester);
-      expect(calls.where((c) => c == 'queryDownload').length, 1);
-      expect(calls.where((c) => c == 'startBackgroundDownload').length, 1);
-      expect(installed, hasLength(1));
+      expect(downloader.names, hasLength(1));
+      expect(native.installs, hasLength(1));
       expectNothingPoppedUp();
 
       await tester.tap(find.byKey(const Key('update.banner.install')));
       await tester.pump();
       await tester.pump();
-      expect(installed, ['/x/new.apk', '/x/new.apk']);
+      expect(native.installs, hasLength(2));
       await unmount(tester);
     });
 
     testWidgets('completed while in the background: installs on resume',
         (tester) async {
-      final installed = <String>[];
-      var polls = 0;
-      fakeUpdate(installed: installed);
-      final fake = UpdateService.instance.channelOverride!;
-      UpdateService.instance.channelOverride = (method, args) async =>
-          method == 'queryDownload' && polls++ == 0
-              ? {'status': 'running', 'bytesDownloaded': 1, 'bytesTotal': 2}
-              : await fake(method, args);
-      await pumpApp(tester);
-      expect(AutoUpdateChecker.instance.downloadingVersion, '0.3.0+6');
-      for (final s in [
-        AppLifecycleState.inactive,
-        AppLifecycleState.hidden,
-        AppLifecycleState.paused,
-      ]) {
-        tester.binding.handleAppLifecycleStateChanged(s);
-      }
+      downloader.gate = Completer<void>();
+      final u = await pumpApp(tester);
+      expect(u.controller.downloading.value, isTrue);
+      lifecycle(tester, toBackground);
+      downloader.gate!.complete();
       await tester.pump(const Duration(seconds: 1));
-      expect(AutoUpdateChecker.instance.readyVersion, '0.3.0+6');
-      expect(installed, isEmpty, reason: 'not while the app is in the back');
+      expect(u.controller.ready.value, '0.3.0+6');
+      expect(native.installs, isEmpty, reason: 'not while in the back');
 
-      for (final s in [
-        AppLifecycleState.hidden,
-        AppLifecycleState.inactive,
-        AppLifecycleState.resumed,
-      ]) {
-        tester.binding.handleAppLifecycleStateChanged(s);
-      }
+      lifecycle(tester, toForeground);
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(installed, ['/x/new.apk']);
+      expect(native.installs, ['/cache/BestCollage-0.3.0-6.apk']);
       expectNothingPoppedUp();
       await unmount(tester);
     });
 
     testWidgets(
-        'a failed background download leaves a banner; Retry downloads '
+        'a failed background download leaves a banner; Try again downloads '
         'silently again and installs', (tester) async {
-      final installed = <String>[];
-      var attempts = 0;
-      UpdateService.instance
-        ..fetchOverride = ((_) async => releasesJson(['0.2.2+4', '0.3.0+6']))
-        ..fileExistsOverride = ((_) => true)
-        ..channelOverride = (method, args) async {
-          switch (method) {
-            case 'startBackgroundDownload':
-              if (args['silent'] == true) attempts++;
-              return {'downloadId': attempts};
-            case 'queryDownload':
-              return attempts == 1
-                  ? {'status': 'failed', 'reason': 1000}
-                  : {'status': 'successful', 'localPath': '/x/new.apk'};
-            case 'installApk':
-              installed.add(args['path'] as String);
-              return 'ok';
-          }
-          return null;
-        };
+      downloader.fail = true;
       await pumpApp(tester);
-      expect(installed, isEmpty);
-      expect(find.byKey(const Key('update.banner.retry')), findsOneWidget);
+      expect(native.installs, isEmpty);
+      expect(find.text("Version 0.3.0 (6) couldn't be downloaded"),
+          findsOneWidget);
 
+      downloader.fail = false;
       await tester.tap(find.byKey(const Key('update.banner.retry')));
       await tester.pump();
-      expect(
-          find.textContaining('Downloading in the background'), findsOneWidget);
-      expectNothingPoppedUp();
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(const Duration(milliseconds: 800));
-      }
-      expect(attempts, 2);
-      expect(installed, ['/x/new.apk']);
-      expectNothingPoppedUp();
-      await unmount(tester);
-    });
-
-    testWidgets(
-        'Install on a build that isn\'t downloaded yet: only a SnackBar, '
-        'then Android\'s dialog', (tester) async {
-      AppSettings.instance.autoUpdateCheckEnabled = false;
-      addTearDown(() => AppSettings.instance.autoUpdateCheckEnabled = true);
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
-      await pumpApp(tester);
-      expect(calls, isEmpty, reason: 'automatic checks are off');
-
-      AutoUpdateChecker.instance.onInstallVersion!(UpdateInfo(
-          version: '0.3.0+6', htmlUrl: '', apkUrl: 'https://x/a.apk'));
-      await tester.pump();
-      expect(
-          find.textContaining('Downloading in the background'), findsOneWidget);
+      expect(find.textContaining('in the background'), findsOneWidget);
       expectNothingPoppedUp();
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(installed, ['/x/new.apk']);
+      expect(downloader.names, hasLength(2));
+      expect(native.installs, ['/cache/BestCollage-0.3.0-6.apk']);
       expectNothingPoppedUp();
       await unmount(tester);
     });
 
-    testWidgets('an older version (rollback) downloads silently too',
+    testWidgets(
+        'automatic checks off: nothing by itself; turned on, the poll starts',
         (tester) async {
       AppSettings.instance.autoUpdateCheckEnabled = false;
-      addTearDown(() => AppSettings.instance.autoUpdateCheckEnabled = true);
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
       await pumpApp(tester);
+      expect(github.requests, isEmpty, reason: 'automatic checks are off');
+      await tester.pump(const Duration(minutes: 16));
+      expect(github.requests, isEmpty);
 
-      AutoUpdateChecker.instance.onInstallVersion!(UpdateInfo(
-          version: '0.2.1+3', htmlUrl: '', apkUrl: 'https://x/old.apk'));
+      AppSettings.instance.autoUpdateCheckEnabled = true;
+      unawaited(AppSettings.instance.save());
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(
-          calls, containsAllInOrder(['startBackgroundDownload', 'installApk']));
-      expect(installed, ['/x/new.apk']);
-      expect(AutoUpdateChecker.instance.readyVersion, isNull,
-          reason: 'an older build is no update');
-      expect(find.text('Version 0.2.1+3 downloaded · ready to install'),
-          findsOneWidget);
-      expectNothingPoppedUp();
+      expect(github.requests, hasLength(1));
+      expect(native.installs, hasLength(1));
       await unmount(tester);
     });
 
-    testWidgets(
-        'pulling down on the changelog downloads a newer build silently, '
-        'then opens Android\'s dialog', (tester) async {
-      AppSettings.instance.autoUpdateCheckEnabled = false;
-      addTearDown(() => AppSettings.instance.autoUpdateCheckEnabled = true);
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
-      await pumpApp(tester);
-      expect(calls, isEmpty, reason: 'automatic checks are off');
-
-      tester
-          .state<NavigatorState>(find.byType(Navigator).first)
-          .push(MaterialPageRoute<void>(builder: (_) => const ChangelogPage()));
-      final list = find.byKey(const Key('changelog.list'));
-      for (var i = 0; i < 50 && list.evaluate().isEmpty; i++) {
-        await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 10)));
-        await tester.pump();
-      }
-      await tester.fling(list, const Offset(0, 400), 1000);
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 200));
-      }
-      expect(
-          calls, containsAllInOrder(['startBackgroundDownload', 'installApk']));
-      expect(installed, ['/x/new.apk']);
-      expect(find.byType(AlertDialog), findsNothing);
-      expect(find.textContaining('· Update ready 0.3.0 (6)'), findsOneWidget);
-      expect(find.byKey(const Key('changelog.install')), findsOneWidget);
-      await unmount(tester);
-    });
-
-    testWidgets('an APK downloaded before a restart is reused', (tester) async {
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
-      UpdateService.instance.prefsOverride = {
-        'update_downloaded_apk': '{"version":"0.3.0+6","path":"/x/old.apk"}',
-      };
-      await pumpApp(tester);
-      expect(calls, isNot(contains('startBackgroundDownload')));
-      expect(installed, ['/x/old.apk']);
-      expectNothingPoppedUp();
-      await unmount(tester);
-    });
-  });
-
-  group('About page', () {
-    testWidgets(
-        'check, then Download & install hands it to the silent download',
+    testWidgets('coming back checks when the last check is 15+ minutes old',
         (tester) async {
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.1+3', '0.3.0+6']);
-      final asked = <String>[];
-      AutoUpdateChecker.instance.onInstallVersion =
-          (info) => asked.add(info.version);
+      await pumpApp(tester);
+      expect(github.requests, hasLength(1));
+      await resume(tester);
+      expect(github.requests, hasLength(1), reason: 'checked just now');
+      now = now.add(const Duration(minutes: 16));
+      await resume(tester);
+      expect(github.requests, hasLength(2));
+      await unmount(tester);
+    });
 
-      // Set in this zone: awaiting a future made in setUp never resumes here.
+    testWidgets(
+        'Check for updates (About): only a SnackBar, then Android\'s dialog',
+        (tester) async {
+      AppSettings.instance.autoUpdateCheckEnabled = false;
       AppVersion.setForTest('0.2.2', '4');
+      await makeUpdates();
       await tester.pumpWidget(const MaterialApp(home: AboutPage()));
       await tester.tap(find.text('Check for updates'));
-      await tester.pumpAndSettle();
-      expect(find.text('Version 0.3.0+6 is available.'), findsOneWidget);
-      expect(find.textContaining('Go back to 0.2.1+3'), findsOneWidget);
-
-      await tester.ensureVisible(find.textContaining('Download & install'));
-      await tester.tap(find.textContaining('Download & install'));
-      await tester.pumpAndSettle();
-      expect(asked, ['0.3.0+6']);
-      // Only a passive line while it downloads — no progress bar.
-      AutoUpdateChecker.instance.setDownloading('0.3.0+6', 0.4);
       await tester.pump();
-      expect(find.text('Downloading 0.3.0+6 in the background… 40%'),
-          findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.byType(Dialog), findsNothing);
-      AutoUpdateChecker.instance
-        ..setDownloading(null)
-        ..readyVersion = '0.3.0+6';
       await tester.pump();
-      expect(find.text('Version 0.3.0+6 downloaded.'), findsOneWidget);
-
-      await tester.ensureVisible(find.textContaining('Go back to 0.2.1+3'));
-      await tester.tap(find.textContaining('Go back to 0.2.1+3'));
-      await tester.pumpAndSettle();
-      expect(asked, ['0.3.0+6', '0.2.1+3']);
-      expect(find.textContaining('Going back to 0.2.1+3'), findsOneWidget);
-      AutoUpdateChecker.instance.onInstallVersion = null;
-    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
-
-    testWidgets('says so when already up to date', (tester) async {
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.2+4']);
-      // Set in this zone: awaiting a future made in setUp never resumes here.
-      AppVersion.setForTest('0.2.2', '4');
-      await tester.pumpWidget(const MaterialApp(home: AboutPage()));
-      await tester.tap(find.text('Check for updates'));
-      await tester.pumpAndSettle();
       expect(
-          find.text('You have the latest version (0.2.2+4).'), findsOneWidget);
+          find.textContaining('Downloading version 0.3.0 (6) in the '
+              'background'),
+          findsOneWidget);
+      expectNothingPoppedUp();
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(native.installs, ['/cache/BestCollage-0.3.0-6.apk']);
+      expectNothingPoppedUp();
     });
 
-    testWidgets('a rate-limited check says try later', (tester) async {
-      UpdateService.instance.fetchOverride =
-          (_) async => throw const UpdateRateLimitedException();
+    testWidgets('Check for updates when up to date says so', (tester) async {
+      github.body = [release('0.2.2+4')];
       AppVersion.setForTest('0.2.2', '4');
+      await makeUpdates();
       await tester.pumpWidget(const MaterialApp(home: AboutPage()));
       await tester.tap(find.text('Check for updates'));
       await tester.pumpAndSettle();
-      expect(find.textContaining('try again later'), findsOneWidget);
-      expect(find.textContaining('Update check failed'), findsNothing);
-    });
-
-    testWidgets('shows a failed check', (tester) async {
-      UpdateService.instance.fetchOverride = (_) async => throw 'no network';
-      // Set in this zone: awaiting a future made in setUp never resumes here.
-      AppVersion.setForTest('0.2.2', '4');
-      await tester.pumpWidget(const MaterialApp(home: AboutPage()));
-      await tester.tap(find.text('Check for updates'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Update check failed'), findsOneWidget);
+      expect(find.text('Up to date'), findsOneWidget);
+      expect(native.installs, isEmpty);
     });
   });
 
   group('Changelog page', () {
-    Future<void> openChangelog(WidgetTester tester,
-        {String version = '0.2.2', DateTime? updateTime}) async {
-      // Set in this zone: awaiting a future made in setUp never resumes here.
-      AppVersion.setForTest(version, '4', updateTime);
+    Future<void> openChangelog(WidgetTester tester) async {
       await tester.pumpWidget(const MaterialApp(home: ChangelogPage()));
       // The asset loads outside the fake clock.
       final list = find.byKey(const Key('changelog.list'));
@@ -738,13 +520,6 @@ void main() {
       await tester.pump();
     }
 
-    Future<void> pullDown(WidgetTester tester) async {
-      await openChangelog(tester);
-      await tester.fling(
-          find.byKey(const Key('changelog.list')), const Offset(0, 400), 1000);
-      await tester.pumpAndSettle();
-    }
-
     String statusText(WidgetTester tester) {
       final tile = tester.widget<ListTile>(find.descendant(
           of: find.byKey(const Key('changelog.status')),
@@ -752,98 +527,92 @@ void main() {
       return '${(tile.title as Text).data}\n${(tile.subtitle as Text).data}';
     }
 
-    testWidgets('pulling down hands a newer build to the silent download',
+    testWidgets('the card: downloaded, installed, last checked',
         (tester) async {
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.2+4', '0.3.0+6']);
-      final found = <String>[];
-      AutoUpdateChecker.instance
-        ..onFound = ((i) => found.add(i.version))
-        ..dismiss('0.3.0+6');
-      await pullDown(tester);
-      expect(found, ['0.3.0+6'], reason: 'asked for, so even after "Later"');
-      expect(statusText(tester),
-          contains('Current version 0.2.2 (4) · Update available 0.3.0 (6)'));
-      expect(statusText(tester), contains('Last checked '));
-    });
-
-    testWidgets('pulling down says so when up to date', (tester) async {
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.2+4']);
+      AppVersion.setForTest('0.2.2', '4');
+      await makeUpdates(stored: {
+        'state.updates.installedBuild': 4,
+        'state.updates.installedAt': '2026-10-12T11:25:00.000',
+        'state.updates.lastCheck': '2026-10-12T11:28:00.000',
+        'state.updates.downloaded': jsonEncode({
+          'key': '0.2.2+4',
+          'label': '0.2.2 (4)',
+          'at': '2026-10-12T11:20:00.000',
+        }),
+      });
       await openChangelog(tester);
-      expect(statusText(tester), contains('Not checked yet'));
-      await tester.fling(
-          find.byKey(const Key('changelog.list')), const Offset(0, 400), 1000);
-      await tester.pumpAndSettle();
-      expect(statusText(tester),
-          startsWith('Current version 0.2.2 (4) · Up to date'));
-      expect(statusText(tester), contains(' · Pull down to check for updates'));
-      expect(find.byKey(const Key('changelog.install')), findsNothing);
-    });
-
-    testWidgets('pulling down shows a failed check', (tester) async {
-      UpdateService.instance.fetchOverride = (_) async => throw 'no network';
-      await pullDown(tester);
-      expect(find.textContaining('Update check failed'), findsOneWidget);
-    });
-
-    testWidgets('shows when the running build was downloaded and installed',
-        (tester) async {
-      UpdateService.instance.prefsOverride = {
-        'update_download_times': '{"0.2.2+4":"2026-10-12T11:20:00.000"}',
-      };
-      await openChangelog(tester, updateTime: DateTime(2026, 10, 12, 11, 25));
-      expect(statusText(tester),
+      final text = statusText(tester);
+      expect(text, startsWith('Current version 0.2.2 (4) · Up to date'));
+      expect(text,
           contains('Downloaded 12.10.26 11:20 · Installed 12.10.26 11:25'));
-      expect(statusText(tester), isNot(contains('null')));
+      expect(
+          text, contains('Last checked 12.10.26 11:28 · Pull down to check'));
     });
 
-    testWidgets('without the platform time, installed = first start',
-        (tester) async {
-      UpdateService.instance.now = () => DateTime(2026, 10, 12, 9, 5);
+    testWidgets('without a record, installed = first start', (tester) async {
+      AppVersion.setForTest('0.2.2', '4');
+      now = DateTime(2026, 10, 12, 9, 5);
+      await makeUpdates();
       await openChangelog(tester);
       final text = statusText(tester);
       expect(text, contains('Installed 12.10.26 09:05'));
       expect(text, isNot(contains('Downloaded')));
-      expect(UpdateService.instance.prefsOverride!['updates.installed_build'],
-          '0.2.2+4');
+      expect(text, contains('Not checked yet'));
     });
 
-    testWidgets('a downloaded newer build is ready to install', (tester) async {
-      UpdateService.instance.prefsOverride = {
-        'update_download_times': '{"0.3.0+6":"2026-10-12T14:02:00.000"}',
-      };
-      var installs = 0;
-      AutoUpdateChecker.instance
-        ..readyVersion = '0.3.0+6'
-        ..onInstall = () => installs++;
-      await openChangelog(tester);
-      final text = statusText(tester);
-      expect(text, contains('· Update ready 0.3.0 (6)'));
-      expect(text,
-          contains('0.3.0 (6) downloaded 12.10.26 14:02 · ready to install'));
-      await tester.tap(find.byKey(const Key('changelog.install')));
-      expect(installs, 1);
-    });
-
-    testWidgets('a silent download shows only in the status line',
+    testWidgets(
+        'pulling down checks, downloads silently and opens Android\'s dialog',
         (tester) async {
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.2.2+4', '0.3.0+6']);
-      AutoUpdateChecker.instance.onInstall = () {};
-      await pullDown(tester);
-      expect(find.byKey(const Key('changelog.install')), findsOneWidget);
-      AutoUpdateChecker.instance.setDownloading('0.3.0+6', 0.5);
+      AppVersion.setForTest('0.2.2', '4');
+      await makeUpdates();
+      await openChangelog(tester);
+      expect(github.requests, isEmpty, reason: 'not started: no auto check');
+      await tester.fling(
+          find.byKey(const Key('changelog.list')), const Offset(0, 400), 1000);
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+      expect(github.requests, hasLength(1));
+      expect(native.installs, ['/cache/BestCollage-0.3.0-6.apk']);
+      expect(find.byType(AlertDialog), findsNothing);
+      final text = statusText(tester);
+      expect(text, contains('Version 0.3.0 (6) available'));
+      expect(text,
+          contains('0.3.0 (6) downloaded 12.10.26 11:30 · ready to install'));
+    });
+
+    testWidgets('an older version (rollback) downloads silently too',
+        (tester) async {
+      github.body = [release('0.4.4+12'), release('0.4.5+13')];
+      AppVersion.setForTest('0.4.5', '13');
+      await makeUpdates();
+      await openChangelog(tester);
+      final older = find.text('0.4.4');
+      await tester.scrollUntilVisible(older, 200,
+          scrollable: find.descendant(
+              of: find.byKey(const Key('changelog.list')),
+              matching: find.byType(Scrollable)));
+      await tester.tap(older);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('uninstalled'), findsOneWidget,
+          reason: 'the downgrade note');
+      await tester.tap(find.text('Download version 0.4.4 (12)'));
       await tester.pump();
-      expect(statusText(tester),
-          contains('Current version 0.2.2 (4) · Downloading 0.3.0 (6)… 50%'));
-      expect(find.byKey(const Key('changelog.install')), findsNothing);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.textContaining('Downloading version 0.4.4 (12) in the'),
+          findsOneWidget);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(native.installs, ['/cache/BestCollage-0.4.4-12.apk']);
+      await tester.pumpAndSettle();
+      expectNothingPoppedUpIn(tester);
     });
 
     testWidgets('one card per release; the installed one is checked',
         (tester) async {
-      await openChangelog(tester, version: '0.4.3');
+      AppVersion.setForTest('0.4.3', '4');
+      await makeUpdates(phone: false);
+      await openChangelog(tester);
       // Newer entries above it can push it below the fold.
       await tester.scrollUntilVisible(find.text('0.4.3'), 200,
           scrollable: find.descendant(
@@ -885,29 +654,12 @@ Some note between sections.
       ]);
       expect(releases.last.items, ['Quiet downloads']);
     });
-
-    test('a completed download records when', () async {
-      UpdateService.instance.now = () => DateTime(2026, 10, 12, 11, 20);
-      await UpdateService.instance.markVersionDownloaded('0.3.0+6', '/x/a.apk');
-      expect(await UpdateService.instance.downloadedAt('0.3.0+6'),
-          DateTime(2026, 10, 12, 11, 20));
-      expect(await UpdateService.instance.downloadedAt('0.3.1+6'),
-          DateTime(2026, 10, 12, 11, 20),
-          reason: 'the build number is what counts');
-      expect(await UpdateService.instance.downloadedAt('0.3.0+7'), isNull);
-      expect(await UpdateService.instance.readyApk('0.3.0+6'), isNull,
-          reason: 'not on disk in a unit test');
-    });
   });
+}
 
-  test('the setting is on by default and survives a restart', () {
-    final s = AppSettings.instance..resetForTest();
-    expect(s.autoUpdateCheckEnabled, isTrue);
-    s.autoUpdateCheckEnabled = false;
-    final saved = s.toMap();
-    s.resetForTest();
-    s.applyMap(saved);
-    expect(s.autoUpdateCheckEnabled, isFalse);
-    s.resetForTest();
-  });
+/// No dialog or bottom sheet left on screen.
+void expectNothingPoppedUpIn(WidgetTester tester) {
+  expect(find.byType(Dialog), findsNothing);
+  expect(find.byType(AlertDialog), findsNothing);
+  expect(find.byType(BottomSheet), findsNothing);
 }

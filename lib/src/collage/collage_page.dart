@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 
 import '../app_config.dart';
 import '../app_settings.dart';
+import '../services/app_updates.dart';
 import '../services/log_service.dart';
 import '../ui/app_drawer.dart';
 import 'collage_canvas.dart';
@@ -200,7 +201,8 @@ class _CollagePageState extends State<CollagePage> {
     final items = await _pick(room);
     if (items.isEmpty) return;
     final dropped = c.addPhotos(items);
-    if (dropped > 0) _snack('A collage holds up to 4 photos — kept the first 4.');
+    if (dropped > 0)
+      _snack('A collage holds up to 4 photos — kept the first 4.');
   }
 
   Future<void> _replaceSelected() async {
@@ -325,16 +327,26 @@ class _CollagePageState extends State<CollagePage> {
           ],
         ],
       ),
-      body: _restoring
-          ? const Center(child: CircularProgressIndicator())
-          : c.isEmpty
-              ? _EmptyState(
-                  onPick: _addPhotos,
-                  history: _history,
-                  onOpen: _openEntry,
-                  onShowAll: _openHistory,
-                )
-              : _editor(),
+      body: Column(
+        children: [
+          // In-app updates: "Update ready · <version>" with Install once
+          // Android's dialog was cancelled, Try again after a failed
+          // download; nothing otherwise.
+          UpdateBanner(controller: AppUpdates.instance.controller),
+          Expanded(
+            child: _restoring
+                ? const Center(child: CircularProgressIndicator())
+                : c.isEmpty
+                    ? _EmptyState(
+                        onPick: _addPhotos,
+                        history: _history,
+                        onOpen: _openEntry,
+                        onShowAll: _openHistory,
+                      )
+                    : _editor(),
+          ),
+        ],
+      ),
       bottomNavigationBar: c.isEmpty || _restoring
           ? null
           : NavigationBar(
