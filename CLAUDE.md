@@ -90,7 +90,13 @@ APK).
   (`auto_update_dialog.dart`). A failed silent download leaves a banner whose
   Install downloads in the foreground and installs. Pulling down on the
   Changelog checks right away (`AutoUpdateChecker.checkNow` → the same
-  silent download). The finished APK is remembered
+  silent download). The Changelog (`changelog_page.dart`) is one card per
+  release under `UpdateStatusCard`, which listens to `AutoUpdateChecker`
+  (`checking`, `lastCheck`, `available`, `readyVersion`, `onInstall`) and
+  shows "Downloaded … · Installed …" (`UpdateService.downloadedAt`, stamped
+  by `markVersionDownloaded`; `installedAt` = Android's `lastUpdateTime` via
+  package_info_plus, else the first start of the build, recorded from
+  `main.dart`). The finished APK is remembered
   (`readyApk`) and reused after a restart. Nothing installs without a tap:
   Install commits it to a PackageInstaller session (`ApkInstaller.kt`,
   `InstallReceiver`) so Android's "Update this app?" is the only step;
