@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.4] - 2026-10-12
+- Menu: the same order as BestToDo — Home, Settings, Previous collages, Changelog, About, App Logs, Startup Times, Test Results
+
 ## [0.4.3] - 2026-10-12
 - Dev, staging and main are one app again: BestCollage. Every build updates the same app, which installs the newest build of any branch (the version line still shows dev or staging). If you have BestCollage Dev or BestCollage Staging installed, uninstall them; they no longer get updates.
 
