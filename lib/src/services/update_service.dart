@@ -29,7 +29,7 @@ class UpdateInfo {
   /// Direct download URL of the `.apk`.
   final String? apkUrl;
 
-  /// Size of the APK in bytes, for the download progress bar.
+  /// Size of the APK in bytes, for the download percentage.
   final int? apkSizeBytes;
 
   /// Branch the build came from: `main`, `staging` or `dev`. Informational
@@ -271,9 +271,7 @@ class UpdateService {
       current = AppVersion.versionWithBuild;
     }
     final decoded = jsonDecode(await _fetch(Uri.parse(releasesUrl)));
-    final builds = decoded is List
-        ? releaseBuilds(decoded)
-        : <UpdateInfo>[];
+    final builds = decoded is List ? releaseBuilds(decoded) : <UpdateInfo>[];
     UpdateInfo? previous;
     for (final b in builds) {
       if (compareBuilds(b.version, current) < 0) {
@@ -369,9 +367,9 @@ class UpdateService {
   }
 
   /// Hands [info]'s APK to Android's `DownloadManager` and returns its id.
-  /// A [silent] download shows no notification (the automatic one).
+  /// A [silent] download (every one the app starts) shows no notification.
   Future<int> startBackgroundDownload(UpdateInfo info,
-      {bool silent = false}) async {
+      {bool silent = true}) async {
     final url = info.apkUrl;
     if (url == null) throw StateError('This build has no APK to download');
     final fileName =
@@ -417,7 +415,7 @@ class UpdateService {
   Stream<DownloadProgress> downloadInBackground(
     UpdateInfo info, {
     Duration interval = const Duration(milliseconds: 700),
-    bool silent = false,
+    bool silent = true,
   }) async* {
     final id = await startBackgroundDownload(info, silent: silent);
     LogService.add('update',

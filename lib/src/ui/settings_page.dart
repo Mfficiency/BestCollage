@@ -2,6 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../app_settings.dart';
+import '../services/auto_update_checker.dart';
 import '../services/backup_service.dart';
 import '../util/date_time_format.dart';
 import 'subpage_app_bar.dart';
@@ -184,8 +185,8 @@ class _SettingsPageState extends State<SettingsPage> {
       _snack('Export canceled');
       return;
     }
-    final file =
-        await BackupService.instance.exportToDirectory(dir, includeData: includeData);
+    final file = await BackupService.instance
+        .exportToDirectory(dir, includeData: includeData);
     _snack(file != null ? 'Exported to ${file.path}' : 'Export failed');
   }
 
@@ -310,11 +311,24 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           SwitchListTile(
             title: const Text('Automatically check for updates'),
-            subtitle: const Text(
-                'Checks for a newer version every 15 minutes while the app is '
-                'open and downloads it quietly in the background; when it is '
-                'ready the app asks to install it. Nothing installs without '
-                'your tap. About → Check for updates always works.'),
+            subtitle: ListenableBuilder(
+              listenable: AutoUpdateChecker.instance,
+              builder: (context, _) {
+                final checker = AutoUpdateChecker.instance;
+                final downloading = checker.downloadingVersion;
+                final fraction = checker.downloadFraction;
+                return Text([
+                  'Checks for a newer version every 15 minutes while the app '
+                      'is open and downloads it silently in the background; '
+                      'when it is complete Android asks "Update this app?". '
+                      'Nothing installs without your tap. About → Check for '
+                      'updates always works.',
+                  if (downloading != null)
+                    'Downloading $downloading…'
+                        '${fraction != null ? ' ${(fraction * 100).round()}%' : ''}',
+                ].join('\n'));
+              },
+            ),
             value: _s.autoUpdateCheckEnabled,
             onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
           ),

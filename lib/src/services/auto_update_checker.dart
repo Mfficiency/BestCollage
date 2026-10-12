@@ -64,10 +64,36 @@ class AutoUpdateChecker extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? _downloadingVersion;
+  double? _downloadFraction;
+
+  /// Version whose APK is downloading silently right now; null otherwise.
+  /// The only sign of a running download is this, shown as passive text
+  /// (Changelog status card, About) — never a dialog or notification.
+  String? get downloadingVersion => _downloadingVersion;
+
+  /// 0..1 of [downloadingVersion], when the size is known.
+  double? get downloadFraction => _downloadFraction;
+
+  /// Set by the app's silent download; null [version] when it ends.
+  void setDownloading(String? version, [double? fraction]) {
+    if (_downloadingVersion == version && _downloadFraction == fraction) {
+      return;
+    }
+    _downloadingVersion = version;
+    _downloadFraction = version == null ? null : fraction;
+    notifyListeners();
+  }
+
   /// Install button on the Changelog's status card: installs the ready
-  /// APK, or downloads [available] first. Null where the app can't install
-  /// (desktop, tests).
+  /// APK, or downloads [available] first (silently). Null where the app
+  /// can't install (desktop, tests).
   VoidCallback? onInstall;
+
+  /// About's "Download & install" / "Go back to …": downloads that build
+  /// silently, then opens Android's install dialog. Null where the app can't
+  /// install (desktop, tests).
+  UpdateFoundCallback? onInstallVersion;
 
   /// Where a build found by [checkNow] goes: the app's silent download
   /// (`CollageAppState`), set even while the poll is off.

@@ -53,9 +53,9 @@ class MainActivity : FlutterActivity() {
                         val destFile = File(destDir, fileName)
                         val downloadManager =
                             getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                        // Silent: the automatic background download shows no
-                        // notification (DOWNLOAD_WITHOUT_NOTIFICATION); the app
-                        // asks once the APK is complete.
+                        // Silent (every update download): no notification
+                        // (DOWNLOAD_WITHOUT_NOTIFICATION); Android's install
+                        // dialog opens once the APK is complete.
                         val silent = call.argument<Boolean>("silent") == true
                         val request = DownloadManager.Request(Uri.parse(url))
                             .setTitle("BestCollage update")

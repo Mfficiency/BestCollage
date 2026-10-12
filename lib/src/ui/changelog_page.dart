@@ -13,7 +13,8 @@ import 'subpage_app_bar.dart';
 /// check.
 ///
 /// Pulling down checks for a newer build (any channel) right away; one
-/// that is found downloads in the background and the app asks to install it
+/// that is found downloads silently in the background (only this page's
+/// status card says "Downloading …") and Android's install dialog opens
 /// when it is complete, like the automatic check.
 class ChangelogPage extends StatefulWidget {
   const ChangelogPage({super.key});
@@ -96,7 +97,8 @@ String _versionLabel(String version) {
 // ── Update status ────────────────────────────────────────────────────────
 
 /// Top of the changelog: "Current version x.y.z (build) · Up to date" (or
-/// "Update available" / "Update ready" / "Checking…"), when the running
+/// "Update available" / "Downloading … 40%" / "Update ready" /
+/// "Checking…"), when the running
 /// build was downloaded and installed, a downloaded newer build waiting to
 /// be installed, and the last check. Turns primary with an Install button
 /// when a newer build is available.
@@ -158,15 +160,20 @@ class _UpdateStatusCardState extends State<UpdateStatusCard> {
     final available = _checker.available;
     final last = _checker.lastCheck;
     final newer = ready ?? available?.version;
+    final downloading = _checker.downloadingVersion;
+    final fraction = _checker.downloadFraction;
     final status = checking
         ? 'Checking…'
-        : ready != null
-            ? 'Update ready ${_versionLabel(ready)}'
-            : available != null
-                ? 'Update available ${_versionLabel(available.version)}'
-                : last != null
-                    ? 'Up to date'
-                    : null;
+        : downloading != null && ready == null
+            ? 'Downloading ${_versionLabel(downloading)}…'
+                '${fraction != null ? ' ${(fraction * 100).round()}%' : ''}'
+            : ready != null
+                ? 'Update ready ${_versionLabel(ready)}'
+                : available != null
+                    ? 'Update available ${_versionLabel(available.version)}'
+                    : last != null
+                        ? 'Up to date'
+                        : null;
     final title = [
       'Current version ${_versionLabel(AppVersion.versionWithBuild)}'
           '${AppVersion.channelSuffix}',
@@ -201,7 +208,10 @@ class _UpdateStatusCardState extends State<UpdateStatusCard> {
         title: Text(title),
         subtitle: Text(lines.join('\n')),
         isThreeLine: lines.length > 1,
-        trailing: newer != null && onInstall != null && !checking
+        trailing: newer != null &&
+                onInstall != null &&
+                !checking &&
+                (ready != null || downloading == null)
             ? FilledButton(
                 key: const Key('changelog.install'),
                 onPressed: onInstall,
