@@ -21,6 +21,9 @@ class AppVersion {
   static String get versionWithBuild =>
       _build.isEmpty ? _version : '$_version+$_build';
 
+  /// The build number (Android's versionCode); 0 when unknown.
+  static int get buildNumber => int.tryParse(_build) ?? 0;
+
   /// When this build was installed or last updated on the device (Android's
   /// `PackageInfo.lastUpdateTime`); null where the platform doesn't say.
   static DateTime? get updateTime => _updateTime;
