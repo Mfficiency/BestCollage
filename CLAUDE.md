@@ -86,8 +86,9 @@ APK).
   above the installed versionCode (x.y.z doesn't matter). A newer build
   downloads **silently** into the cache (`.part`, resumed, reused after a
   restart; no dialog, progress bar or notification); when complete Android's
-  own "Update this app?" (PackageInstaller session from the plugin) is the
-  only confirm, by itself once per build and start while in the foreground.
+  installer app (the plugin's `ACTION_INSTALL_PACKAGE`; a PackageInstaller
+  session as fallback) asks "Update this app?" as the only confirm and ends
+  with "App updated" and Open, by itself once per build and start while in the foreground.
   Cancelled: the slim `UpdateBanner` on the home screen (`collage_page.dart`)
   offers Install; a failed download offers Try again. A tap that starts a
   download shows one SnackBar. The Changelog shows the package's

@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.8] - 2026-10-12
+- Updates: when an update is installed, Android shows "App updated" with an Open button again, so you are back in the app with one tap
+
 ## [0.4.7] - 2026-10-12
 - Updates behave exactly like the other Mfficiency apps (shared update module 1.1.0): when GitHub limits update checks, the automatic checks wait until GitHub says they may try again (30 minutes if it doesn't say), and a release whose APK is still uploading is no longer offered. Coming back to the app still checks when the last check is 15+ minutes old, and the "Automatically check for updates" switch takes effect right away.
 
