@@ -7,7 +7,7 @@ import 'subpage_app_bar.dart';
 
 /// Renders the bundled `CHANGELOG.md` (newest version first — keep the file
 /// ordered that way; `tool/bump_version.dart` prepends new entries for you).
-/// Pulling down checks for a newer build of this channel right away; one
+/// Pulling down checks for a newer build (any channel) right away; one
 /// that is found downloads in the background and the app asks to install it
 /// when it is complete, like the automatic check.
 class ChangelogPage extends StatefulWidget {

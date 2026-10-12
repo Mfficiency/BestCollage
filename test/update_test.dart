@@ -76,7 +76,19 @@ void main() {
       expect(UpdateService.compareVersions('0.3.2+10010', '0.3.2+7'), 1);
     });
 
-    test('only the own channel counts, newest first', () {
+    test('updates compare the build number (versionCode) alone', () {
+      expect(UpdateService.buildNumber('0.4.3+3600000'), 3600000);
+      expect(UpdateService.buildNumber('0.4.3'), 0);
+      expect(UpdateService.buildNumber('unknown'), 0);
+      // A higher build wins even with a lower x.y.z (another channel).
+      expect(UpdateService.compareBuilds('0.4.2+3600010', '0.4.3+3600000'), 1);
+      expect(UpdateService.compareBuilds('0.4.3+10050', '0.4.2+3600000'), -1);
+      expect(UpdateService.compareBuilds('0.4.3+5', '0.4.2+5'), 0);
+      // Minute-based build numbers are above the old 10000 + commit count.
+      expect(UpdateService.compareBuilds('0.4.3+3600000', '0.4.2+10060'), 1);
+    });
+
+    test('every channel counts, highest build first', () {
       final list = jsonDecode(jsonEncode([
         release('0.3.3+10050', channel: 'dev'),
         release('0.3.3+10040'),
@@ -84,25 +96,28 @@ void main() {
         release('0.3.3+10048', channel: 'dev'),
         release('0.3.3+10049', channel: 'dev', draft: true),
         release('0.3.3+10051', channel: 'dev', apk: false),
+        release('0.3.2+10052', channel: 'staging'),
         release('0.3.3+10044'),
-        // A main-style tag marked prerelease is not a main release.
+        // A main-style tag marked prerelease still counts.
         release('0.3.3+10046', prerelease: true),
         {'tag_name': 'something-else', 'assets': []},
       ])) as List;
-      expect(
-          UpdateService.channelReleases(list, channel: 'dev')
-              .map((b) => b.version),
-          ['0.3.3+10050', '0.3.3+10048']);
-      expect(
-          UpdateService.channelReleases(list, channel: 'main')
-              .map((b) => b.version),
-          ['0.3.3+10044', '0.3.3+10040']);
-      final staging = UpdateService.channelReleases(list, channel: 'staging');
-      expect(staging.map((b) => b.version), ['0.3.3+10045']);
-      expect(staging.single.channel, 'staging');
-      expect(staging.single.tag, 'v0.3.3-10045-staging');
-      expect(staging.single.apkUrl, contains('v0.3.3-10045-staging'));
-      expect(staging.single.apkSizeBytes, 24 * 1024 * 1024);
+      final builds = UpdateService.releaseBuilds(list);
+      expect(builds.map((b) => b.version), [
+        '0.3.2+10052',
+        '0.3.3+10050',
+        '0.3.3+10048',
+        '0.3.3+10046',
+        '0.3.3+10045',
+        '0.3.3+10044',
+        '0.3.3+10040',
+      ]);
+      expect(builds.map((b) => b.channel),
+          ['staging', 'dev', 'dev', 'main', 'staging', 'main', 'main']);
+      final staging = builds.firstWhere((b) => b.version == '0.3.3+10045');
+      expect(staging.tag, 'v0.3.3-10045-staging');
+      expect(staging.apkUrl, contains('v0.3.3-10045-staging'));
+      expect(staging.apkSizeBytes, 24 * 1024 * 1024);
     });
   });
 
@@ -134,31 +149,59 @@ void main() {
   });
 
   group('channels', () {
-    test('a dev build never sees main or staging releases', () async {
-      UpdateService.instance.channelForTest = 'dev';
+    test('the highest build of any channel is the update', () async {
       UpdateService.instance.fetchOverride = (_) async => jsonEncode([
-            release('0.4.0+10090'),
-            release('0.4.0+10091', channel: 'staging'),
-            release('0.2.2+10020', channel: 'dev'),
-            release('0.2.2+10010', channel: 'dev'),
-            release('0.2.1+10005', channel: 'dev'),
+            release('0.4.3+3600100'),
+            release('0.4.3+3600250', channel: 'dev'),
+            release('0.4.3+3600200', channel: 'staging'),
+            release('0.4.4+3600300', channel: 'dev', draft: true),
           ]);
       final check = await UpdateService.instance
-          .checkReleases(currentVersion: '0.2.2+10010');
-      expect(check.latest!.version, '0.2.2+10020');
-      expect(check.latest!.channel, 'dev');
+          .checkReleases(currentVersion: '0.4.3+3600100');
       expect(check.hasUpdate, isTrue);
-      // Rollback: the dev release before the running one.
-      expect(check.rollback!.version, '0.2.1+10005');
+      expect(check.latest!.version, '0.4.3+3600250');
+      expect(check.latest!.channel, 'dev');
+      expect(check.latest!.tag, 'v0.4.3-3600250-dev');
+      expect(check.rollback, isNull);
     });
 
-    test('no release of the own channel means no update', () async {
-      UpdateService.instance.channelForTest = 'staging';
-      UpdateService.instance.fetchOverride =
-          (_) async => releasesJson(['0.9.0+10100']);
-      final check =
-          await UpdateService.instance.checkReleases(currentVersion: '0.2.2+4');
-      expect(check.latest, isNull);
+    test('a higher build wins over a higher x.y.z', () async {
+      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
+            release('0.5.0+3600100', channel: 'dev'),
+            release('0.4.3+3600200'),
+          ]);
+      final check = await UpdateService.instance
+          .checkReleases(currentVersion: '0.4.3+3600050');
+      expect(check.latest!.version, '0.4.3+3600200');
+      expect(check.latest!.channel, 'main');
+      expect(check.hasUpdate, isTrue);
+    });
+
+    test('nothing above the installed versionCode means no update', () async {
+      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
+            // Higher x.y.z, lower build: Android would refuse it anyway.
+            release('0.9.0+3600100', channel: 'staging'),
+            release('0.4.3+3600050'),
+            release('0.4.2+3600000', channel: 'dev'),
+          ]);
+      final check = await UpdateService.instance
+          .checkReleases(currentVersion: '0.4.3+3600200');
+      expect(check.latest!.version, '0.9.0+3600100');
+      expect(check.hasUpdate, isFalse);
+      expect(await UpdateService.instance
+              .checkForUpdate(currentVersion: '0.4.3+3600200'),
+          isNull);
+      // Rollback: the highest build below the running one, any channel.
+      expect(check.rollback!.version, '0.9.0+3600100');
+    });
+
+    test('a build equal to the installed one is not an update', () async {
+      UpdateService.instance.fetchOverride = (_) async => jsonEncode([
+            release('0.4.3+3600100', channel: 'staging'),
+            release('0.4.3+3600100'),
+          ]);
+      final check = await UpdateService.instance
+          .checkReleases(currentVersion: '0.4.3+3600100');
       expect(check.hasUpdate, isFalse);
       expect(check.rollback, isNull);
     });

@@ -22,21 +22,16 @@ if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
-// Release channel (set by the laptop builder / tool/build.ps1 release): each
-// branch is its own app so dev, staging and main install side by side.
-// Unset (flutter run, CI tests) = main = the base app id.
+// Release channel (set by the laptop builder / tool/build.ps1 release). It is
+// only validated here: dev, staging and main are ONE app (same applicationId,
+// same label), so any channel's build updates the installed app. The app
+// shows the channel next to its version (--dart-define=BUILD_CHANNEL).
+// Unset (flutter run, CI tests) = main.
 val buildChannel = (System.getenv("BUILD_CHANNEL") ?: "").trim().lowercase()
     .ifEmpty { "main" }
-val channelIdSuffix = when (buildChannel) {
-    "main" -> ""
-    "dev", "staging" -> ".$buildChannel"
-    else -> throw GradleException(
+if (buildChannel !in listOf("main", "staging", "dev")) {
+    throw GradleException(
         "BUILD_CHANNEL must be main, staging or dev (got '$buildChannel')")
-}
-val channelLabel = when (buildChannel) {
-    "dev" -> "BestCollage Dev"
-    "staging" -> "BestCollage Staging"
-    else -> "BestCollage"
 }
 
 android {
@@ -72,10 +67,7 @@ android {
 
     defaultConfig {
         applicationId = "com.mfficiency.best_collage"
-        if (channelIdSuffix.isNotEmpty()) {
-            applicationIdSuffix = channelIdSuffix
-        }
-        manifestPlaceholders["appLabel"] = channelLabel
+        manifestPlaceholders["appLabel"] = "BestCollage"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

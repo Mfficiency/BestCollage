@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.3] - 2026-10-12
+- Dev, staging and main are one app again: BestCollage. Every build updates the same app, which installs the newest build of any branch (the version line still shows dev or staging). If you have BestCollage Dev or BestCollage Staging installed, uninstall them; they no longer get updates.
+
 ## [0.4.2] - 2026-10-11
 - Updates: if the quiet background download fails, a banner offers Install (it downloads again and installs). Pull down on the Changelog to check for an update right away.
 

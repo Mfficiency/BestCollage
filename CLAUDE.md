@@ -15,7 +15,9 @@ technical pages.
   triggers `.github/workflows/laptop-build.yml`, which asks the laptop builder
   (Mfficiency/laptop-builder, self-hosted runner) to run
   `tool\build.ps1 release` in its own clone with `BUILD_CHANNEL` (branch),
-  `BUILD_NUMBER` (10000 + commit count) and `PUBLISH=1`. That builds the
+  `BUILD_NUMBER` (minutes since 2020-01-01T00:00:00Z of the source commit's
+  committer time — the newest commit that isn't a `build: … [skip ci]` APK
+  commit; used as-is) and `PUBLISH=1`. That builds the
   channel APK, commits it to `github_releases/<channel>/` on the branch
   (newest 2 kept; `[skip ci]`, so it doesn't trigger another build) and
   publishes a GitHub release in Mfficiency/BestCollage — tag
@@ -23,9 +25,9 @@ technical pages.
   others. Nothing else is committed. A HEAD that only changes
   `github_releases/` builds the commit below it with that commit's build
   number (released already → nothing to do; a failed release or a push the
-  APK commit was rebased onto → built then). Each channel is its own app:
-  `com.mfficiency.best_collage` "BestCollage", `.staging` "BestCollage
-  Staging", `.dev` "BestCollage Dev", so they install side by side. Without
+  APK commit was rebased onto → built then). All channels are ONE app
+  (`com.mfficiency.best_collage`, "BestCollage"); the channel only shows in
+  the tag and next to the in-app version (`· dev`). Without
   `PUBLISH=1` it only builds (into `github_releases/<channel>/`, not
   committed), for local testing.
 - Manual build: `powershell -ExecutionPolicy Bypass -File tool\build.ps1 all --release`
@@ -75,9 +77,11 @@ APK).
   tapped entry to `CollagePage`, which reopens it.
 - `services/update_service.dart` + `auto_update_checker.dart` — in-app
   updates (same flow as Hally Remote): reads the GitHub releases list of
-  Mfficiency/BestCollage (public, no auth, `/releases?per_page=30`), keeps
-  only this build's channel (`AppVersion.channel`, from
-  `--dart-define=BUILD_CHANNEL`) and compares (x.y.z, build). `CollageApp`
+  Mfficiency/BestCollage (public, no auth, `/releases?per_page=30`), takes
+  the releases of every channel (main, staging, dev; prereleases included,
+  drafts not — `UpdateService.releaseBuilds`) and offers the one with the
+  highest build number when it is higher than the installed versionCode
+  (`compareBuilds`; x.y.z doesn't matter). `CollageApp`
   polls every 15 minutes on Android (Settings → Updates; anonymous API limit
   60/hour, a 403/429 pauses it); a newer build downloads
   **silently** with DownloadManager (`silent` → `VISIBILITY_HIDDEN`, no
@@ -91,14 +95,15 @@ APK).
   Install commits it to a PackageInstaller session (`ApkInstaller.kt`,
   `InstallReceiver`) so Android's "Update this app?" is the only step;
   without the "install unknown apps" switch that opens and the install
-  starts on resume. About has "Check for updates" + rollback to the channel's previous
-  release. Builds must keep the same signing key (the local-only
+  starts on resume. About has "Check for updates" + rollback to the highest
+  release below the running build. Builds must keep the same signing key (the local-only
   `debug.keystore`) to install over each other. Tests fake it via
-  `fetchOverride` / `channelOverride` / `prefsOverride` /
-  `fileExistsOverride` / `channelForTest` and
+  `fetchOverride` / `channelOverride` (the platform channel) /
+  `prefsOverride` / `fileExistsOverride` and
   `CollageAppState.autoUpdateForTest`. The `.apk` files directly in
   `github_releases/` are legacy (installs older than 0.4.1 read them); the
-  channel builds go into its `<channel>/` subfolders.
+  channel builds go into its `<channel>/` subfolders. The updater reads
+  neither — only the GitHub releases.
 
 ## Conventions
 

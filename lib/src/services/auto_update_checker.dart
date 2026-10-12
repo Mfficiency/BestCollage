@@ -4,7 +4,7 @@ import 'update_service.dart';
 
 typedef UpdateFoundCallback = void Function(UpdateInfo info);
 
-/// Polls GitHub for a newer build of this app's channel while the app is open
+/// Polls GitHub for a newer build (any channel) while the app is open
 /// (Settings → Updates, on by default). Reports a build via
 /// [UpdateFoundCallback] when it appears — not again for a version the user
 /// declined, until a newer one is published. Only reports builds with an APK,

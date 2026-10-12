@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../util/app_version.dart';
 import 'log_service.dart';
 
-/// An installable app build: one GitHub release of this app's channel.
+/// An installable app build: one GitHub release (of any channel).
 class UpdateInfo {
   UpdateInfo({
     required this.version,
@@ -32,16 +32,17 @@ class UpdateInfo {
   /// Size of the APK in bytes, for the download progress bar.
   final int? apkSizeBytes;
 
-  /// Release channel: `main`, `staging` or `dev`.
+  /// Branch the build came from: `main`, `staging` or `dev`. Informational
+  /// only — every channel is the same app and any of them can update it.
   final String channel;
 
   /// The release's git tag, e.g. `v0.3.3-10042-dev`.
   final String? tag;
 }
 
-/// The outcome of one update check: the newest release of this app's channel
-/// and the newest one older than the running build, so the About page can
-/// offer both an update and a rollback.
+/// The outcome of one update check: the release with the highest build number
+/// (any channel) and the newest one below the running build, so the About
+/// page can offer both an update and a rollback.
 class UpdateCheck {
   UpdateCheck({required this.currentVersion, this.latest, this.previous});
 
@@ -51,20 +52,21 @@ class UpdateCheck {
   /// Newest build found, whatever its version relative to [currentVersion].
   final UpdateInfo? latest;
 
-  /// Newest build of the same channel older than [currentVersion], if any.
+  /// Highest build (any channel) below [currentVersion]'s build, if any.
   final UpdateInfo? previous;
 
-  /// True when [latest] is actually newer than the running app.
+  /// True when [latest]'s build number is higher than the running app's
+  /// (Android's versionCode).
   bool get hasUpdate =>
       latest != null &&
-      UpdateService.compareVersions(latest!.version, currentVersion) > 0;
+      UpdateService.compareBuilds(latest!.version, currentVersion) > 0;
 
-  /// The build to offer as "one version back": [previous], as long as it is
-  /// older than the version running.
+  /// The build to offer as "one version back": [previous], as long as its
+  /// build number is below the one running.
   UpdateInfo? get rollback {
     final candidate = previous;
     if (candidate == null) return null;
-    if (UpdateService.compareVersions(candidate.version, currentVersion) >= 0) {
+    if (UpdateService.compareBuilds(candidate.version, currentVersion) >= 0) {
       return null;
     }
     return candidate;
@@ -124,16 +126,19 @@ class DownloadProgress {
 ///
 /// Builds are the GitHub releases of Mfficiency/BestCollage that the laptop
 /// builder publishes (`tool/build.ps1 release`), one per push to `dev`,
-/// `staging` and `main`. Each branch is its own Android app (channel) and
-/// only ever sees its own channel's releases: tag `v<x.y.z>-<build>` for main
-/// (not a prerelease), `v<x.y.z>-<build>-staging` / `-dev` for the others.
+/// `staging` and `main`: tag `v<x.y.z>-<build>` for main,
+/// `v<x.y.z>-<build>-staging` / `-dev` (prereleases) for the others. All
+/// three are the same Android app, so the updater looks at every channel's
+/// releases and offers the one with the highest build number (the builder's
+/// minutes since 2020-01-01 UTC of the source commit's committer time) when
+/// it is higher than the installed versionCode.
 /// The repo is public, so the lookup and the download are plain
 /// unauthenticated HTTPS. Every build is signed with the same key
 /// (`android/app/debug.keystore`, kept off git and copied in by the builder),
 /// so a new APK installs over the old one and keeps the app's data.
 ///
-/// The old `github_releases/` folder on `dev` is legacy: installs from before
-/// the channel builds still read it, newer ones don't.
+/// The updater does not read the `github_releases/` folder (the `.apk` files
+/// directly in it are legacy, read only by installs older than 0.4.1).
 class UpdateService {
   UpdateService._();
 
@@ -170,12 +175,6 @@ class UpdateService {
   /// Test seam: replaces the check that a downloaded APK is still on disk.
   bool Function(String path)? fileExistsOverride;
 
-  /// Test seam: the channel to look for instead of [AppVersion.channel].
-  String? channelForTest;
-
-  /// The channel whose releases this app installs.
-  String get channel => channelForTest ?? AppVersion.channel;
-
   /// Numeric components of a version string: `0.1.74+45` → [0, 1, 74, 45].
   /// Unparseable strings ("unknown" in tests) yield [] and compare as zero.
   static List<int> versionNumbers(String version) => RegExp(r'\d+')
@@ -197,6 +196,20 @@ class UpdateService {
     return 0;
   }
 
+  /// The build number of an `x.y.z+build` string (the Android versionCode);
+  /// 0 when there is none.
+  static int buildNumber(String version) {
+    final plus = version.indexOf('+');
+    if (plus < 0) return 0;
+    return int.tryParse(version.substring(plus + 1).trim()) ?? 0;
+  }
+
+  /// Compares two `x.y.z+build` strings by build number alone — that is what
+  /// Android compares (versionCode), and builds of different channels can
+  /// carry the same or an older x.y.z. Returns <0, 0 or >0.
+  static int compareBuilds(String a, String b) =>
+      buildNumber(a).compareTo(buildNumber(b));
+
   static final RegExp _tagPattern =
       RegExp(r'^v(\d+\.\d+\.\d+)-(\d+)(?:-(dev|staging))?$');
 
@@ -211,18 +224,16 @@ class UpdateService {
     );
   }
 
-  /// Maps a GitHub releases-API list to [channel]'s builds, newest first.
-  /// Drafts, releases without an APK and other channels' releases are
-  /// skipped; a `main` release must also not be a prerelease.
-  static List<UpdateInfo> channelReleases(List<dynamic> releases,
-      {required String channel}) {
+  /// Maps a GitHub releases-API list to installable builds of every channel
+  /// (main, staging, dev; prereleases included), highest build number first.
+  /// Drafts, releases without an APK and unknown tags are skipped.
+  static List<UpdateInfo> releaseBuilds(List<dynamic> releases) {
     final builds = <UpdateInfo>[];
     for (final release in releases) {
       if (release is! Map || release['draft'] == true) continue;
       final tag = release['tag_name'] as String? ?? '';
       final parsed = parseTag(tag);
-      if (parsed == null || parsed.channel != channel) continue;
-      if (channel == 'main' && release['prerelease'] == true) continue;
+      if (parsed == null) continue;
       Map? apk;
       for (final asset in (release['assets'] as List?) ?? const []) {
         if (asset is Map &&
@@ -242,12 +253,15 @@ class UpdateService {
         tag: tag,
       ));
     }
-    builds.sort((a, b) => compareVersions(b.version, a.version));
+    builds.sort((a, b) {
+      final byBuild = compareBuilds(b.version, a.version);
+      return byBuild != 0 ? byBuild : compareVersions(b.version, a.version);
+    });
     return builds;
   }
 
-  /// Looks up the newest build of this app's channel and the newest one older
-  /// than the running app (for a rollback). Throws on network/parse failures
+  /// Looks up the highest build of any channel and the highest one below the
+  /// running app's build (for a rollback). Throws on network/parse failures
   /// (the About page shows the error) and [UpdateRateLimitedException] when
   /// GitHub is rate-limiting.
   Future<UpdateCheck> checkReleases({String? currentVersion}) async {
@@ -258,11 +272,11 @@ class UpdateService {
     }
     final decoded = jsonDecode(await _fetch(Uri.parse(releasesUrl)));
     final builds = decoded is List
-        ? channelReleases(decoded, channel: channel)
+        ? releaseBuilds(decoded)
         : <UpdateInfo>[];
     UpdateInfo? previous;
     for (final b in builds) {
-      if (compareVersions(b.version, current) < 0) {
+      if (compareBuilds(b.version, current) < 0) {
         previous = b;
         break;
       }
@@ -274,7 +288,7 @@ class UpdateService {
     );
   }
 
-  /// The newest build when it is newer than [currentVersion] (defaults to the
+  /// The highest build when it is newer than [currentVersion] (defaults to the
   /// running app's version), or null when the app is up to date.
   Future<UpdateInfo?> checkForUpdate({String? currentVersion}) async {
     final check = await checkReleases(currentVersion: currentVersion);

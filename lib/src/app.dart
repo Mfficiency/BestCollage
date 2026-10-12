@@ -242,7 +242,7 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
           await service.clearPendingDownload();
           // Only if it is still newer than the running app.
           await AppVersion.ensureLoaded();
-          if (UpdateService.compareVersions(
+          if (UpdateService.compareBuilds(
                   version, AppVersion.versionWithBuild) >
               0) {
             _setReady(version, progress.localPath!);
