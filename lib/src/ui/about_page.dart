@@ -50,8 +50,7 @@ class UpdateSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final updates = AppUpdates.instance;
-    final controller = updates.controller;
+    final controller = AppUpdates.instance.controller;
     final theme = Theme.of(context);
     return Column(
       children: [
@@ -71,7 +70,7 @@ class UpdateSection extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : null,
-                onTap: busy ? null : () => updates.checkNow(context),
+                onTap: busy ? null : () => controller.checkNow(context),
               );
             },
           ),
