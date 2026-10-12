@@ -1,37 +1,19 @@
 import 'package:flutter/material.dart';
 
-/// "Update ready" — shown once per start when the automatic background
-/// download of [version] is complete. Install hands it to Android, whose
-/// "Update this app?" is the only step left; Later keeps a banner
-/// ([updateReadyBanner]).
-Future<bool?> showUpdateReadyDialog(BuildContext context, String version) {
-  return showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      icon: const Icon(Icons.system_update_outlined),
-      title: const Text('Update ready'),
-      content: Text('Version $version was downloaded in the background. '
-          'Install it now? The app restarts; your collages stay.'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Later'),
-        ),
-        FilledButton(
-          key: const Key('update.ready.install'),
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Install'),
-        ),
-      ],
-    ),
-  );
-}
+// No dialog of the app's own: a completely downloaded update goes straight
+// to Android's "Update this app?" (see `CollageAppState`). These slim
+// banners are all that stays on screen afterwards.
 
-/// The banner that stays after "Later" until [version] is installed.
-MaterialBanner updateReadyBanner(String version, VoidCallback onInstall) {
+/// The banner that stays once Android's install dialog for [version] was
+/// cancelled (or couldn't open), until it is installed. [older]: a rollback
+/// the user asked for, not an update.
+MaterialBanner updateReadyBanner(String version, VoidCallback onInstall,
+    {bool older = false}) {
   return MaterialBanner(
     leading: const Icon(Icons.system_update_outlined),
-    content: Text('Version $version is downloaded and ready to install'),
+    content: Text(older
+        ? 'Version $version downloaded · ready to install'
+        : 'Update ready · $version'),
     actions: [
       TextButton(
         key: const Key('update.banner.install'),
@@ -42,19 +24,18 @@ MaterialBanner updateReadyBanner(String version, VoidCallback onInstall) {
   );
 }
 
-/// The banner when the background download of [version] failed: Install
-/// downloads it again in the foreground (with Android's download
-/// notification as progress), then installs it.
-MaterialBanner updateAvailableBanner(String version, VoidCallback onInstall) {
+/// The banner when the silent download of [version] failed: Retry
+/// downloads it again, silently, and Android's install dialog opens when it
+/// is complete.
+MaterialBanner updateFailedBanner(String version, VoidCallback onRetry) {
   return MaterialBanner(
     leading: const Icon(Icons.system_update_outlined),
-    content: Text("Version $version is available (the background download "
-        "didn't finish)"),
+    content: Text("Update $version didn't download"),
     actions: [
       TextButton(
-        key: const Key('update.banner.download'),
-        onPressed: onInstall,
-        child: const Text('Install'),
+        key: const Key('update.banner.retry'),
+        onPressed: onRetry,
+        child: const Text('Retry'),
       ),
     ],
   );

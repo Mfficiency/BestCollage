@@ -84,25 +84,35 @@ APK).
   highest build number when it is higher than the installed versionCode
   (`compareBuilds`; x.y.z doesn't matter). `CollageApp`
   polls every 15 minutes on Android (Settings → Updates; anonymous API limit
-  60/hour, a 403/429 pauses it); a newer build downloads
-  **silently** with DownloadManager (`silent` → `VISIBILITY_HIDDEN`, no
-  dialog first). Only when the APK is complete does the app ask: an "Update
-  ready" dialog once per version and start, then a banner
-  (`auto_update_dialog.dart`). A failed silent download leaves a banner whose
-  Install downloads in the foreground and installs. Pulling down on the
-  Changelog checks right away (`AutoUpdateChecker.checkNow` → the same
-  silent download). The Changelog (`changelog_page.dart`) is one card per
+  60/hour, a 403/429 pauses it). **Every** download is silent
+  (DownloadManager `VISIBILITY_HIDDEN`, `silent` defaults to true): the
+  poll, pull-down on the Changelog, the Changelog card's Install, About's
+  "Download & install" and rollback (`AutoUpdateChecker.onInstallVersion`),
+  the failed-download banner's Retry. No dialog, progress bar or
+  notification; while it runs only passive text says so
+  (`AutoUpdateChecker.downloadingVersion`/`downloadFraction` → Changelog
+  status card, Settings › Updates, About), and a tap that starts one shows
+  one SnackBar. When the APK is complete the app has no dialog of its own:
+  it starts the PackageInstaller session (`installApk`, `ApkInstaller.kt`,
+  `InstallReceiver`) right away, so Android's "Update this app?" is the one
+  confirmation — once per version and start, only while resumed (finished
+  in the background → on the next resume); a build the user asked for
+  opens it every time. After that a slim "Update ready · <version>" banner
+  (`auto_update_dialog.dart`) stays with Install; a failed download leaves
+  a banner with Retry. Without the "install unknown apps" switch that
+  screen opens (a SnackBar explains) and the install starts on resume.
+  Pulling down on the Changelog checks right away
+  (`AutoUpdateChecker.checkNow` → the same silent download). The Changelog
+  (`changelog_page.dart`) is one card per
   release under `UpdateStatusCard`, which listens to `AutoUpdateChecker`
-  (`checking`, `lastCheck`, `available`, `readyVersion`, `onInstall`) and
+  (`checking`, `lastCheck`, `available`, `downloadingVersion`,
+  `readyVersion`, `onInstall`) and
   shows "Downloaded … · Installed …" (`UpdateService.downloadedAt`, stamped
   by `markVersionDownloaded`; `installedAt` = Android's `lastUpdateTime` via
   package_info_plus, else the first start of the build, recorded from
   `main.dart`). The finished APK is remembered
-  (`readyApk`) and reused after a restart. Nothing installs without a tap:
-  Install commits it to a PackageInstaller session (`ApkInstaller.kt`,
-  `InstallReceiver`) so Android's "Update this app?" is the only step;
-  without the "install unknown apps" switch that opens and the install
-  starts on resume. About has "Check for updates" + rollback to the highest
+  (`readyApk`) and reused after a restart. Nothing installs without the
+  tap in Android's dialog. About has "Check for updates" + rollback to the highest
   release below the running build. Builds must keep the same signing key (the local-only
   `debug.keystore`) to install over each other. Tests fake it via
   `fetchOverride` / `channelOverride` (the platform channel) /
