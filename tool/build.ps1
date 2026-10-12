@@ -7,11 +7,14 @@
 #
 # "release" is what the laptop builder (Mfficiency/laptop-builder) runs in its
 # own clone for every push to dev, staging and main. Environment:
-#   BUILD_CHANNEL  main | staging | dev (default main). dev/staging build a
-#                  separate app (com.mfficiency.best_collage.dev / .staging,
-#                  label "BestCollage Dev" / "BestCollage Staging").
-#   BUILD_NUMBER   versionCode (builder: 10000 + commit count); default: the
-#                  pubspec build number.
+#   BUILD_CHANNEL  main | staging | dev (default main). Every channel is the
+#                  same app (com.mfficiency.best_collage, "BestCollage"); the
+#                  channel only goes into the tag and the in-app version text.
+#   BUILD_NUMBER   versionCode, used as-is (builder: minutes since
+#                  2020-01-01T00:00:00Z of the source commit's committer time,
+#                  so it is the same for that commit on every channel and the
+#                  app updates to the highest one of any channel); default:
+#                  the pubspec build number.
 #   PUBLISH=1      commit the APK to github_releases/<channel>/ on the branch
 #                  ([skip ci], so it doesn't trigger another build) and
 #                  publish a GitHub release in Mfficiency/BestCollage (tag
@@ -151,10 +154,6 @@ function Invoke-Release {
   $head = (& git rev-parse HEAD).Trim()
   if ($sha -ne $head) {
     Write-Host "==> HEAD only changes github_releases/; building $($sha.Substring(0, 7)) below it."
-    # The builder's number is 10000 + HEAD's commit count; use the source's.
-    if ($env:BUILD_NUMBER) {
-      $buildNumber = "$([int]$buildNumber - ([int](& git rev-list --count $head) - [int](& git rev-list --count $sha)))"
-    }
   }
   $suffix = if ($channel -eq 'main') { '' } else { "-$channel" }
   $tag = "v$name-$buildNumber$suffix"

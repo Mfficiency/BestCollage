@@ -160,16 +160,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('BestCollage v0.1.0+1'), findsOneWidget);
-    for (final label in const [
+    // BestToDo's menu order: Home · Settings · app entries · Changelog ·
+    // About · App Logs · Startup Times.
+    const labels = [
+      'Home',
       'Settings',
-      'About',
+      'Previous collages',
       'Changelog',
+      'About',
       'App Logs',
       'Startup Times',
       'Test Results',
-    ]) {
+    ];
+    for (final label in labels) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
+    final ys = [
+      for (final label in labels) tester.getCenter(find.text(label)).dy,
+    ];
+    expect(ys, orderedEquals([...ys]..sort()));
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();

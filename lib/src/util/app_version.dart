@@ -12,6 +12,7 @@ class AppVersion {
   static String _version = 'unknown';
   static String _build = '';
   static Future<void>? _future;
+  static DateTime? _updateTime;
 
   /// e.g. `1.4.2`.
   static String get version => _version;
@@ -20,10 +21,15 @@ class AppVersion {
   static String get versionWithBuild =>
       _build.isEmpty ? _version : '$_version+$_build';
 
-  /// Release channel this build belongs to: `main`, `staging` or `dev`
+  /// When this build was installed or last updated on the device (Android's
+  /// `PackageInfo.lastUpdateTime`); null where the platform doesn't say.
+  static DateTime? get updateTime => _updateTime;
+
+  /// Branch this build came from: `main`, `staging` or `dev`
   /// (`--dart-define=BUILD_CHANNEL=...`, set by `tool/build.ps1 release`).
-  /// Unset (local `flutter run`, tests) means `main`. Each channel is its own
-  /// Android app and only updates from its own channel's GitHub releases.
+  /// Unset (local `flutter run`, tests) means `main`. Only shown next to the
+  /// version: every channel is the same Android app, and the updater takes
+  /// the highest build of any channel.
   static const String channel =
       String.fromEnvironment('BUILD_CHANNEL', defaultValue: 'main');
 
@@ -48,6 +54,7 @@ class AppVersion {
       _version = info.version;
       _build =
           compiledBuildNumber > 0 ? '$compiledBuildNumber' : info.buildNumber;
+      _updateTime = info.updateTime;
     } catch (_) {
       // Platform channel absent (pure unit tests): keep the defaults.
     }
@@ -60,12 +67,15 @@ class AppVersion {
     _future = null;
     _version = 'unknown';
     _build = '';
+    _updateTime = null;
   }
 
   /// Injects a fixed version for tests that assert on the displayed string.
-  static void setForTest(String version, [String build = '']) {
+  static void setForTest(String version,
+      [String build = '', DateTime? updateTime]) {
     _version = version;
     _build = build;
+    _updateTime = updateTime;
     _future = Future<void>.value();
   }
 }

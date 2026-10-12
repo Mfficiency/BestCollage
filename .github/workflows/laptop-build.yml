@@ -4,8 +4,9 @@ name: Laptop build
 # Mfficiency/laptop-builder (private), whose self-hosted runner on the laptop
 # runs the local build. Needs the secret LAPTOP_BUILD_TOKEN (fine-grained,
 # laptop-builder only, Contents: read and write); skips without it.
-# Each branch is its own channel: the laptop builds that branch's APK
-# (tool/build.ps1 release) and publishes it as a GitHub release here.
+# Each branch is a channel: the laptop builds that branch's APK
+# (tool/build.ps1 release) and publishes it as a GitHub release here. All
+# channels are the same app; it updates to the highest build of any channel.
 # Commits with [skip ci] (the build's own commits) don't trigger it.
 on:
   push:
