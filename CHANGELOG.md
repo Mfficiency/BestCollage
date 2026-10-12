@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.5] - 2026-10-12
+- Updates now download silently in the background — no progress screen and no notification. When an update is ready, Android's small "Update this app?" confirmation is the only thing that pops up; if you dismiss it, a slim "Update ready" bar lets you install later.
+
 ## [0.4.4] - 2026-10-12
 - Menu: the same order as BestToDo — Home, Settings, Previous collages, Changelog, About, App Logs, Startup Times, Test Results
 - Changelog: one card per version (the installed one has a check mark) under an update card that shows when your version was downloaded and installed, when updates were last checked, and a newer version that is ready to install. Pulling down checks right away and downloads a new version quietly in the background

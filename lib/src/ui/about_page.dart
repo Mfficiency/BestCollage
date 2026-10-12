@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
 import '../app_config.dart';
+import '../services/auto_update_checker.dart';
 import '../services/update_service.dart';
 import '../util/app_version.dart';
 import 'subpage_app_bar.dart';
@@ -48,15 +49,15 @@ enum _UpdatePhase {
   checking,
   upToDate,
   available,
-  downloading,
-  readyToInstall,
   error,
 }
 
 /// "Check for updates" → the GitHub releases of every channel → download one
-/// (in the background, with a progress bar) → hand it to the Android
-/// installer. The main button takes the highest build; a second one
-/// reinstalls the highest build below the running one (rollback). Off Android the buttons open the
+/// silently in the background (only a line of text here says so) → Android's
+/// install dialog opens once it is complete. The main button takes the
+/// highest build; a second one reinstalls the highest build below the
+/// running one (rollback). Both go through the app's update flow
+/// ([AutoUpdateChecker.onInstallVersion]). Off Android the buttons open the
 /// releases page in the browser instead.
 class UpdateSection extends StatefulWidget {
   const UpdateSection({super.key});
@@ -66,20 +67,35 @@ class UpdateSection extends StatefulWidget {
 }
 
 class _UpdateSectionState extends State<UpdateSection> {
+  final _checker = AutoUpdateChecker.instance;
   _UpdatePhase _phase = _UpdatePhase.idle;
   UpdateCheck? _result;
 
-  /// The build being downloaded/installed — the newest, or the rollback one.
+  /// The build asked for — the newest, or the rollback one.
   UpdateInfo? _target;
-  String? _apkPath;
   String _note = '';
-  int _received = 0;
-  int? _total;
+
+  @override
+  void initState() {
+    super.initState();
+    _checker.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _checker.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
 
   bool _installsInPlace(UpdateInfo? info) =>
       !kIsWeb &&
       defaultTargetPlatform == TargetPlatform.android &&
-      info?.apkUrl != null;
+      info?.apkUrl != null &&
+      _checker.onInstallVersion != null;
 
   Future<void> _check() async {
     setState(() {
@@ -105,19 +121,19 @@ class _UpdateSectionState extends State<UpdateSection> {
     }
   }
 
+  /// Hands [info] to the app's silent download; Android's install dialog
+  /// opens when the APK is complete (right away if it is already).
   Future<void> _downloadAndInstall(UpdateInfo? info,
       {bool rollback = false}) async {
     if (info == null) return;
-    if (!_installsInPlace(info)) {
+    final install = _checker.onInstallVersion;
+    if (!_installsInPlace(info) || install == null) {
       await launchUrl(Uri.parse(AppConfig.updateUrl),
           mode: LaunchMode.externalApplication);
       return;
     }
-    _target = info;
     setState(() {
-      _phase = _UpdatePhase.downloading;
-      _received = 0;
-      _total = info.apkSizeBytes;
+      _target = info;
       // Android refuses to replace an app with an older build; say so up
       // front rather than leaving a bare "App not installed".
       _note = rollback
@@ -126,60 +142,22 @@ class _UpdateSectionState extends State<UpdateSection> {
               'saved collages, so export a backup (Settings → Data) first.'
           : '';
     });
-    try {
-      // Already downloaded in the background: install it right away.
-      final earlier = await UpdateService.instance.readyApk(info.version);
-      if (earlier != null) {
-        if (!mounted) return;
-        _apkPath = earlier;
-        setState(() => _phase = _UpdatePhase.readyToInstall);
-        await _install();
-        return;
-      }
-      await for (final progress
-          in UpdateService.instance.downloadInBackground(info)) {
-        if (!mounted) return;
-        if (progress.status == DownloadStatus.failed) {
-          setState(() {
-            _phase = _UpdatePhase.error;
-            _note = 'Download failed'
-                '${progress.reason != null ? ' (${progress.reason})' : ''}';
-          });
-          return;
-        }
-        setState(() {
-          _received = progress.bytesDownloaded;
-          _total = progress.bytesTotal ?? _total;
-        });
-        if (progress.status == DownloadStatus.successful) {
-          _apkPath = progress.localPath;
-          setState(() => _phase = _UpdatePhase.readyToInstall);
-          await _install();
-        }
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _phase = _UpdatePhase.error;
-        _note = 'Download failed: $e';
-      });
-    }
+    install(info);
   }
 
-  Future<void> _install() async {
-    final path = _apkPath;
-    if (path == null) return;
-    try {
-      final result = await UpdateService.instance.installApk(path);
-      if (!mounted) return;
-      if (result == 'needs-permission') {
-        setState(() => _note = 'Allow installs from BestCollage in the '
-            'settings screen that just opened, then tap Install update.');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _note = 'Install failed: $e');
+  /// Passive line about [_target]: downloading in the background, or done.
+  String? _targetStatus() {
+    final target = _target;
+    if (target == null) return null;
+    if (_checker.downloadingVersion == target.version) {
+      final fraction = _checker.downloadFraction;
+      return 'Downloading ${target.version} in the background…'
+          '${fraction != null ? ' ${(fraction * 100).round()}%' : ''}';
     }
+    if (_checker.readyVersion == target.version) {
+      return 'Version ${target.version} downloaded.';
+    }
+    return null;
   }
 
   String _sizeLabel(int? bytes) {
@@ -233,39 +211,19 @@ class _UpdateSectionState extends State<UpdateSection> {
         if (previous != null) {
           children.addAll(_rollbackControls(context, previous));
         }
-      case _UpdatePhase.downloading:
-        final total = _total;
-        final fraction = total != null && total > 0 ? _received / total : null;
-        children
-          ..add(Text(
-            fraction != null
-                ? 'Downloading… ${(fraction * 100).toStringAsFixed(0)}%'
-                : 'Downloading…',
-            textAlign: TextAlign.center,
-          ))
-          ..add(const SizedBox(height: 8))
-          ..add(LinearProgressIndicator(value: fraction))
-          ..add(const SizedBox(height: 8))
-          ..add(Text(
-            'Runs in the background — you can leave this page or the app; '
-            'the installer opens when it\'s ready.',
-            style: theme.textTheme.bodySmall,
-            textAlign: TextAlign.center,
-          ));
-      case _UpdatePhase.readyToInstall:
-        children
-          ..add(Text('Version ${_target?.version} downloaded.',
-              textAlign: TextAlign.center))
-          ..add(const SizedBox(height: 8))
-          ..add(FilledButton.icon(
-            onPressed: _install,
-            icon: const Icon(Icons.install_mobile),
-            label: const Text('Install update'),
-          ));
       case _UpdatePhase.error:
         children.add(Text(_note,
             textAlign: TextAlign.center,
             style: TextStyle(color: theme.colorScheme.error)));
+    }
+
+    if (_targetStatus() case final status?) {
+      children
+        ..add(const SizedBox(height: 8))
+        ..add(Text(status,
+            key: const Key('about.update.status'),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall));
     }
 
     if (_note.isNotEmpty && _phase != _UpdatePhase.error) {
@@ -274,12 +232,10 @@ class _UpdateSectionState extends State<UpdateSection> {
         ..add(Text(_note, textAlign: TextAlign.center));
     }
 
-    final busy =
-        _phase == _UpdatePhase.checking || _phase == _UpdatePhase.downloading;
     return Column(
       children: [
         ElevatedButton.icon(
-          onPressed: busy ? null : _check,
+          onPressed: _phase == _UpdatePhase.checking ? null : _check,
           icon: _phase == _UpdatePhase.checking
               ? const SizedBox(
                   width: 16,

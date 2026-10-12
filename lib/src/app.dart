@@ -51,34 +51,40 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
   @visibleForTesting
   static bool? autoUpdateForTest;
 
-  // Automatic updates, as in Hally Remote: a newer build downloads silently
-  // (no dialog, no notification); once the APK is complete the app asks once
-  // per start, then a banner stays. Nothing installs without a tap, and the
-  // install is a PackageInstaller session, so Android's "Update this app?"
-  // is the only step after that.
+  // Automatic updates, as in Hally Remote: every download is silent (no
+  // dialog, no progress, no notification). Once the APK is complete the app
+  // starts the PackageInstaller session right away, so Android's own "Update
+  // this app?" is the one small confirmation — once per version and start
+  // while the app is in the foreground; cancelled, a slim banner stays.
 
   /// Version downloading silently right now.
   String? _downloadingVersion;
 
-  /// Version whose silent download failed this start: not retried silently
-  /// until the next start; a banner offers Install, which downloads it in
-  /// the foreground ([_downloadAndInstall]).
+  /// Version whose silent download failed this start: not retried by the
+  /// poll until the next start; a banner offers Retry (silent again).
   String? _failedVersion;
 
-  /// Completely downloaded update: `(version, path)`.
+  /// Completely downloaded APK: `(version, path)`.
   ({String version, String path})? _ready;
 
-  /// Version the "Update ready" dialog was shown for this start.
-  String? _askedVersion;
+  /// Version Android's install dialog was opened for by itself this start.
+  String? _offeredVersion;
+
+  /// Version the user asked for (Install / an older version): Android's
+  /// dialog opens as soon as it is downloaded, even if cancelled before.
+  String? _requestedVersion;
 
   /// Version whose "ready" banner is showing.
   String? _bannerVersion;
 
-  /// Install was tapped but Android first needed the "install unknown apps"
+  /// Install started but Android first needed the "install unknown apps"
   /// switch: install when the user comes back.
   bool _installOnResume = false;
 
-  bool _inForeground = true;
+  bool _inForeground = switch (WidgetsBinding.instance.lifecycleState) {
+    null || AppLifecycleState.resumed => true,
+    _ => false,
+  };
 
   @override
   void initState() {
@@ -89,12 +95,15 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     if (_canAutoUpdate) {
       // Pull-down on the changelog: asked for, so a failed download is
       // tried again.
-      AutoUpdateChecker.instance.onFound = (info) {
-        if (_failedVersion == info.version) _failedVersion = null;
-        _onUpdateFound(info);
-      };
-      // The Changelog status card's Install.
-      AutoUpdateChecker.instance.onInstall = _installFromChangelog;
+      AutoUpdateChecker.instance
+        ..onFound = (info) {
+          if (_failedVersion == info.version) _failedVersion = null;
+          _onUpdateFound(info);
+        }
+        // The Changelog status card's Install.
+        ..onInstall = _installFromChangelog
+        // About's "Download & install" and "Go back to …".
+        ..onInstallVersion = installVersion;
       _syncAutoUpdate();
       // A download from an earlier run may have kept going (or finished)
       // while the app was closed — it runs as an Android system service.
@@ -108,7 +117,8 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     AutoUpdateChecker.instance
       ..stop()
-      ..onInstall = null;
+      ..onInstall = null
+      ..onInstallVersion = null;
     super.dispose();
   }
 
@@ -126,8 +136,8 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
       unawaited(_installReady());
       return;
     }
-    // Finished while the app was in the background: ask now.
-    _askWhenReady();
+    // Finished while the app was in the background: open Android's dialog now.
+    _offerInstall();
     // Re-check when the app comes back, if the last check is 15+ min old.
     if (_settings.autoUpdateCheckEnabled) {
       unawaited(AutoUpdateChecker.instance.checkIfDue(_onUpdateFound));
@@ -147,12 +157,19 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
 
   void _onUpdateFound(UpdateInfo info) => unawaited(_downloadSilently(info));
 
-  /// A newer build found by a check: download it without any dialog or
-  /// notification, then ask ([_askWhenReady]).
-  Future<void> _downloadSilently(UpdateInfo info) async {
+  /// Downloads [info] without any dialog, progress or notification, then
+  /// opens Android's install dialog ([_offerInstall]). [requested]: the user
+  /// tapped Install (or an older version), so a failed download is retried
+  /// and the dialog opens even if it was cancelled earlier this start.
+  Future<void> _downloadSilently(UpdateInfo info,
+      {bool requested = false}) async {
     final version = info.version;
+    if (requested) {
+      _requestedVersion = version;
+      if (_failedVersion == version) _failedVersion = null;
+    }
     if (version == _downloadingVersion || version == _failedVersion) return;
-    if (_ready?.version == version) return _askWhenReady();
+    if (_ready?.version == version) return _offerInstall();
     final service = UpdateService.instance;
     // Downloaded before (also by an earlier run): reuse it.
     final earlier = await service.readyApk(version);
@@ -162,21 +179,33 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     if (await service.isDownloading(version)) return;
     if (_downloadingVersion == version) return;
     _downloadingVersion = version;
+    final checker = AutoUpdateChecker.instance..setDownloading(version);
     try {
       await for (final progress
           in service.downloadInBackground(info, silent: true)) {
         if (progress.status == DownloadStatus.successful &&
             progress.localPath != null) {
+          checker.setDownloading(null);
           _setReady(version, progress.localPath!);
         } else if (progress.status == DownloadStatus.failed) {
           _downloadFailed(info);
+        } else {
+          final total = progress.bytesTotal ?? info.apkSizeBytes;
+          checker.setDownloading(
+              version,
+              total != null && total > 0
+                  ? (progress.bytesDownloaded / total).clamp(0.0, 1.0)
+                  : null);
         }
       }
     } catch (e) {
       LogService.add('update', 'background download failed: $e');
       _downloadFailed(info);
     } finally {
-      if (_downloadingVersion == version) _downloadingVersion = null;
+      if (_downloadingVersion == version) {
+        _downloadingVersion = null;
+        checker.setDownloading(null);
+      }
     }
   }
 
@@ -187,47 +216,40 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     _bannerVersion = info.version;
     messenger
       ..hideCurrentMaterialBanner()
-      ..showMaterialBanner(updateAvailableBanner(
-          info.version, () => unawaited(_downloadAndInstall(info))));
+      ..showMaterialBanner(updateFailedBanner(info.version, () {
+        _bannerVersion = null;
+        messenger.hideCurrentMaterialBanner();
+        unawaited(_downloadRequested(info));
+      }));
   }
 
-  /// The failed-download banner's Install: download in the foreground, then
-  /// hand it to Android like the ready banner does.
-  Future<void> _downloadAndInstall(UpdateInfo info) async {
-    if (_downloadingVersion == info.version) return;
-    _downloadingVersion = info.version;
+  /// A tap that needs [info] downloaded first: one SnackBar so the tap
+  /// visibly did something, then the same silent download.
+  Future<void> _downloadRequested(UpdateInfo info) {
     _messengerKey.currentState
-      ?..hideCurrentMaterialBanner()
-      ..showSnackBar(
-          SnackBar(content: Text('Downloading version ${info.version}…')));
-    String? path;
-    try {
-      await for (final progress
-          in UpdateService.instance.downloadInBackground(info)) {
-        if (progress.status == DownloadStatus.successful) {
-          path = progress.localPath;
-        }
-      }
-    } catch (e) {
-      LogService.add('update', 'download failed: $e');
-    } finally {
-      if (_downloadingVersion == info.version) _downloadingVersion = null;
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+          content: Text('Downloading in the background — you\'ll be asked '
+              'to install it when it\'s ready')));
+    return _downloadSilently(info, requested: true);
+  }
+
+  /// Installs [info] (About's "Download & install" or "Go back to …"):
+  /// right away when its APK is downloaded, otherwise after a silent
+  /// download.
+  void installVersion(UpdateInfo info) {
+    _requestedVersion = info.version;
+    if (_ready?.version == info.version) {
+      _offerInstall();
+    } else if (_downloadingVersion == info.version) {
+      // Already downloading: the dialog opens when it is complete.
+    } else {
+      unawaited(_downloadRequested(info));
     }
-    if (path == null) {
-      _bannerVersion = null;
-      _downloadFailed(info);
-      return;
-    }
-    _failedVersion = null;
-    _ready = (version: info.version, path: path);
-    AutoUpdateChecker.instance.readyVersion = info.version;
-    _askedVersion = info.version; // tapped Install already: no dialog
-    _bannerVersion = null;
-    await _installReady();
   }
 
   /// Picks up a background download an earlier run didn't see finish; if it
-  /// completed while the app was closed, the app asks to install it.
+  /// completed while the app was closed, Android's install dialog opens.
   Future<void> _resumePendingUpdateDownload() async {
     final service = UpdateService.instance;
     final pending = await service.pendingDownload();
@@ -239,56 +261,72 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
       return;
     }
     _downloadingVersion = version;
+    final checker = AutoUpdateChecker.instance..setDownloading(version);
     try {
       await for (final progress in service.watchDownload(id)) {
         if (progress.status == DownloadStatus.successful &&
             progress.localPath != null) {
           await service.markVersionDownloaded(version, progress.localPath!);
           await service.clearPendingDownload();
-          // Only if it is still newer than the running app.
+          checker.setDownloading(null);
+          // Only if it is still newer than the running app (or asked for).
           await AppVersion.ensureLoaded();
-          if (UpdateService.compareBuilds(
-                  version, AppVersion.versionWithBuild) >
-              0) {
+          if (_requestedVersion == version ||
+              UpdateService.compareBuilds(
+                      version, AppVersion.versionWithBuild) >
+                  0) {
             _setReady(version, progress.localPath!);
           }
         } else if (progress.status == DownloadStatus.failed) {
           await service.clearPendingDownload();
+        } else {
+          final total = progress.bytesTotal;
+          checker.setDownloading(
+              version,
+              total != null && total > 0
+                  ? (progress.bytesDownloaded / total).clamp(0.0, 1.0)
+                  : null);
         }
       }
     } catch (_) {
       // The next poll starts a fresh download if one is still needed.
     } finally {
-      if (_downloadingVersion == version) _downloadingVersion = null;
+      if (_downloadingVersion == version) {
+        _downloadingVersion = null;
+        checker.setDownloading(null);
+      }
     }
   }
+
+  /// Whether [version] is newer than the running build (not a rollback).
+  bool _isNewer(String version) =>
+      UpdateService.compareBuilds(version, AppVersion.versionWithBuild) > 0;
 
   void _setReady(String version, String path) {
     LogService.add('update', 'ready to install: $version');
     _ready = (version: version, path: path);
-    AutoUpdateChecker.instance.readyVersion = version;
-    _askWhenReady();
+    if (_isNewer(version)) {
+      AutoUpdateChecker.instance.readyVersion = version;
+    }
+    _offerInstall();
   }
 
-  /// Once per version and start, while the app is in the foreground and the
-  /// intro is done: the background download is complete, install now? Later
-  /// leaves a banner that stays until it is installed.
-  void _askWhenReady() {
+  /// The APK is complete: hand it to Android, whose "Update this app?" is
+  /// the only confirmation (no dialog of the app's own). By itself once per
+  /// version and start, only while the app is in the foreground and the
+  /// intro is done; a version the user asked for opens it every time. Not
+  /// opened (or cancelled): the banner offers Install.
+  void _offerInstall() {
     final ready = _ready;
     if (ready == null || _showIntro || !_inForeground || !mounted) return;
-    if (_askedVersion == ready.version) return;
-    final context = _navigatorKey.currentContext;
-    if (context == null) return;
-    _askedVersion = ready.version;
-    unawaited(() async {
-      final install = await showUpdateReadyDialog(context, ready.version);
-      LogService.add('update', 'asked to install: ${install == true}');
-      if (install == true) {
-        await _installReady();
-      } else {
-        _showReadyBanner(ready.version);
-      }
-    }());
+    if (_requestedVersion == ready.version) {
+      _requestedVersion = null;
+    } else if (_offeredVersion == ready.version) {
+      _showReadyBanner(ready.version);
+      return;
+    }
+    _offeredVersion = ready.version;
+    unawaited(_installReady());
   }
 
   void _showReadyBanner(String version) {
@@ -297,19 +335,29 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     _bannerVersion = version;
     messenger
       ..hideCurrentMaterialBanner()
-      ..showMaterialBanner(
-          updateReadyBanner(version, () => unawaited(_installReady())));
+      ..showMaterialBanner(updateReadyBanner(
+          version, () => unawaited(_installReady()),
+          older: !_isNewer(version)));
   }
 
-  /// Hands the downloaded APK to Android (only ever after a tap on Install).
-  /// Without the one-time "install unknown apps" permission its switch opens
-  /// instead, and the install starts when the user comes back.
+  /// Hands the downloaded APK to Android. Without the one-time "install
+  /// unknown apps" permission its switch opens instead (explained in a
+  /// SnackBar), and the install starts when the user comes back.
   Future<void> _installReady() async {
     final ready = _ready;
     if (ready == null) return;
+    LogService.add('update', 'opening the installer for ${ready.version}');
     try {
       final outcome = await UpdateService.instance.installApk(ready.path);
-      if (outcome == 'needs-permission') _installOnResume = true;
+      if (outcome == 'needs-permission') {
+        _installOnResume = true;
+        _messengerKey.currentState
+          ?..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
+              content: Text('Allow installs from BestCollage in the screen '
+                  'that just opened — the update installs when you come '
+                  'back.')));
+      }
     } catch (e) {
       _messengerKey.currentState
           ?.showSnackBar(SnackBar(content: Text('Install failed: $e')));
@@ -319,12 +367,13 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
   }
 
   /// Install on the Changelog's status card: the downloaded APK, or (while
-  /// it isn't downloaded yet) download it in the foreground first.
+  /// it isn't downloaded yet) a silent download first.
   void _installFromChangelog() {
-    if (_ready != null) {
-      unawaited(_installReady());
+    if (_ready case final ready? when _isNewer(ready.version)) {
+      _requestedVersion = ready.version;
+      _offerInstall();
     } else if (AutoUpdateChecker.instance.available case final info?) {
-      unawaited(_downloadAndInstall(info));
+      installVersion(info);
     }
   }
 
@@ -332,7 +381,7 @@ class CollageAppState extends State<CollageApp> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('intro_shown', true);
     if (mounted) setState(() => _showIntro = false);
-    _askWhenReady();
+    _offerInstall();
   }
 
   /// Restarts the first-run introduction (About page action).

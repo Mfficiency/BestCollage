@@ -187,7 +187,8 @@ void main() {
           .checkReleases(currentVersion: '0.4.3+3600200');
       expect(check.latest!.version, '0.9.0+3600100');
       expect(check.hasUpdate, isFalse);
-      expect(await UpdateService.instance
+      expect(
+          await UpdateService.instance
               .checkForUpdate(currentVersion: '0.4.3+3600200'),
           isNull);
       // Rollback: the highest build below the running one, any channel.
@@ -371,10 +372,14 @@ void main() {
         ..fetchOverride = ((_) async => releasesJson(['0.2.2+4', '0.3.0+6']))
         ..fileExistsOverride = ((_) => true)
         ..channelOverride = (method, args) async {
-          calls.add(method);
+          // A download that isn't silent shows up as a different call (no
+          // expect here: it may run outside the test's guarded zone).
+          calls.add(
+              method == 'startBackgroundDownload' && args['silent'] != true
+                  ? 'startBackgroundDownload (with notification)'
+                  : method);
           switch (method) {
             case 'startBackgroundDownload':
-              expect(args['silent'], isTrue);
               return {'downloadId': 5};
             case 'queryDownload':
               return {'status': 'successful', 'localPath': '/x/new.apk'};
@@ -401,37 +406,16 @@ void main() {
       AutoUpdateChecker.instance.stop();
     }
 
-    testWidgets('downloads silently, then asks; Install hands it to Android',
-        (tester) async {
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
-      await pumpApp(tester);
-      // No "download?" question first: it downloaded, then asks.
-      expect(calls, containsAllInOrder(['startBackgroundDownload']));
-      expect(find.text('Update ready'), findsOneWidget);
-      expect(find.textContaining('Version 0.3.0+6 was downloaded'),
-          findsOneWidget);
+    /// No dialog, bottom sheet or progress of the app's own on screen.
+    void expectNothingPoppedUp() {
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    }
 
-      await tester.tap(find.byKey(const Key('update.ready.install')));
-      await tester.pump();
-      await tester.pump();
-      expect(installed, ['/x/new.apk']);
-      await unmount(tester);
-    });
-
-    testWidgets('Later keeps a banner; it is not asked again this start',
-        (tester) async {
-      final installed = <String>[];
-      final calls = fakeUpdate(installed: installed);
-      await pumpApp(tester);
-      await tester.tap(find.text('Later'));
-      await tester.pumpAndSettle();
-      expect(find.text('Update ready'), findsNothing);
-      expect(find.text('Version 0.3.0+6 is downloaded and ready to install'),
-          findsOneWidget);
-      expect(installed, isEmpty);
-
-      // Coming back to the app checks again: no new download, no new dialog.
+    Future<void> resume(WidgetTester tester) async {
       for (final s in [
         AppLifecycleState.inactive,
         AppLifecycleState.hidden,
@@ -445,20 +429,90 @@ void main() {
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(calls.where((c) => c == 'queryDownload').length, 1);
-      expect(calls.where((c) => c == 'startBackgroundDownload').length, 1);
-      expect(find.text('Update ready'), findsNothing);
+    }
 
-      await tester.tap(find.byKey(const Key('update.banner.install')));
-      await tester.pump();
-      await tester.pump();
+    testWidgets(
+        'downloads silently, then opens Android\'s install dialog directly',
+        (tester) async {
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
+      await pumpApp(tester);
+      // No question before or after the download: Android's "Update this
+      // app?" (the PackageInstaller session) is the only confirmation.
+      expect(
+          calls, containsAllInOrder(['startBackgroundDownload', 'installApk']));
       expect(installed, ['/x/new.apk']);
+      expectNothingPoppedUp();
+      expect(find.text('Update ready'), findsNothing);
       await unmount(tester);
     });
 
     testWidgets(
-        'a failed background download leaves a banner; Install '
-        'downloads it again and installs', (tester) async {
+        'cancelled: a banner stays; not opened again by itself this start',
+        (tester) async {
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
+      await pumpApp(tester);
+      expect(installed, hasLength(1));
+      // The user cancelled Android's dialog: the slim banner is left.
+      expect(find.text('Update ready · 0.3.0+6'), findsOneWidget);
+
+      // Coming back to the app checks again: no new download, no new
+      // install dialog.
+      await resume(tester);
+      expect(calls.where((c) => c == 'queryDownload').length, 1);
+      expect(calls.where((c) => c == 'startBackgroundDownload').length, 1);
+      expect(installed, hasLength(1));
+      expectNothingPoppedUp();
+
+      await tester.tap(find.byKey(const Key('update.banner.install')));
+      await tester.pump();
+      await tester.pump();
+      expect(installed, ['/x/new.apk', '/x/new.apk']);
+      await unmount(tester);
+    });
+
+    testWidgets('completed while in the background: installs on resume',
+        (tester) async {
+      final installed = <String>[];
+      var polls = 0;
+      fakeUpdate(installed: installed);
+      final fake = UpdateService.instance.channelOverride!;
+      UpdateService.instance.channelOverride = (method, args) async =>
+          method == 'queryDownload' && polls++ == 0
+              ? {'status': 'running', 'bytesDownloaded': 1, 'bytesTotal': 2}
+              : await fake(method, args);
+      await pumpApp(tester);
+      expect(AutoUpdateChecker.instance.downloadingVersion, '0.3.0+6');
+      for (final s in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(s);
+      }
+      await tester.pump(const Duration(seconds: 1));
+      expect(AutoUpdateChecker.instance.readyVersion, '0.3.0+6');
+      expect(installed, isEmpty, reason: 'not while the app is in the back');
+
+      for (final s in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(s);
+      }
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(installed, ['/x/new.apk']);
+      expectNothingPoppedUp();
+      await unmount(tester);
+    });
+
+    testWidgets(
+        'a failed background download leaves a banner; Retry downloads '
+        'silently again and installs', (tester) async {
       final installed = <String>[];
       var attempts = 0;
       UpdateService.instance
@@ -467,7 +521,7 @@ void main() {
         ..channelOverride = (method, args) async {
           switch (method) {
             case 'startBackgroundDownload':
-              attempts++;
+              if (args['silent'] == true) attempts++;
               return {'downloadId': attempts};
             case 'queryDownload':
               return attempts == 1
@@ -480,29 +534,84 @@ void main() {
           return null;
         };
       await pumpApp(tester);
-      expect(find.text('Update ready'), findsNothing);
-      expect(find.byKey(const Key('update.banner.download')), findsOneWidget);
+      expect(installed, isEmpty);
+      expect(find.byKey(const Key('update.banner.retry')), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('update.banner.download')));
+      await tester.tap(find.byKey(const Key('update.banner.retry')));
+      await tester.pump();
+      expect(
+          find.textContaining('Downloading in the background'), findsOneWidget);
+      expectNothingPoppedUp();
       for (var i = 0; i < 5; i++) {
         await tester.pump(const Duration(milliseconds: 800));
       }
       expect(attempts, 2);
       expect(installed, ['/x/new.apk']);
+      expectNothingPoppedUp();
+      await unmount(tester);
+    });
+
+    testWidgets(
+        'Install on a build that isn\'t downloaded yet: only a SnackBar, '
+        'then Android\'s dialog', (tester) async {
+      AppSettings.instance.autoUpdateCheckEnabled = false;
+      addTearDown(() => AppSettings.instance.autoUpdateCheckEnabled = true);
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
+      await pumpApp(tester);
+      expect(calls, isEmpty, reason: 'automatic checks are off');
+
+      AutoUpdateChecker.instance.onInstallVersion!(UpdateInfo(
+          version: '0.3.0+6', htmlUrl: '', apkUrl: 'https://x/a.apk'));
+      await tester.pump();
+      expect(
+          find.textContaining('Downloading in the background'), findsOneWidget);
+      expectNothingPoppedUp();
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(installed, ['/x/new.apk']);
+      expectNothingPoppedUp();
+      await unmount(tester);
+    });
+
+    testWidgets('an older version (rollback) downloads silently too',
+        (tester) async {
+      AppSettings.instance.autoUpdateCheckEnabled = false;
+      addTearDown(() => AppSettings.instance.autoUpdateCheckEnabled = true);
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
+      await pumpApp(tester);
+
+      AutoUpdateChecker.instance.onInstallVersion!(UpdateInfo(
+          version: '0.2.1+3', htmlUrl: '', apkUrl: 'https://x/old.apk'));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+          calls, containsAllInOrder(['startBackgroundDownload', 'installApk']));
+      expect(installed, ['/x/new.apk']);
+      expect(AutoUpdateChecker.instance.readyVersion, isNull,
+          reason: 'an older build is no update');
+      expect(find.text('Version 0.2.1+3 downloaded · ready to install'),
+          findsOneWidget);
+      expectNothingPoppedUp();
       await unmount(tester);
     });
 
     testWidgets(
         'pulling down on the changelog downloads a newer build silently, '
-        'then asks', (tester) async {
+        'then opens Android\'s dialog', (tester) async {
       AppSettings.instance.autoUpdateCheckEnabled = false;
       addTearDown(() => AppSettings.instance.autoUpdateCheckEnabled = true);
-      final calls = fakeUpdate();
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
       await pumpApp(tester);
       expect(calls, isEmpty, reason: 'automatic checks are off');
 
-      tester.state<NavigatorState>(find.byType(Navigator).first).push(
-          MaterialPageRoute<void>(builder: (_) => const ChangelogPage()));
+      tester
+          .state<NavigatorState>(find.byType(Navigator).first)
+          .push(MaterialPageRoute<void>(builder: (_) => const ChangelogPage()));
       final list = find.byKey(const Key('changelog.list'));
       for (var i = 0; i < 50 && list.evaluate().isEmpty; i++) {
         await tester.runAsync(
@@ -513,45 +622,38 @@ void main() {
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
-      expect(calls, containsAllInOrder(['startBackgroundDownload']));
-      expect(find.text('Update ready'), findsOneWidget);
-      await tester.tap(find.text('Later'));
-      await tester.pumpAndSettle();
+      expect(
+          calls, containsAllInOrder(['startBackgroundDownload', 'installApk']));
+      expect(installed, ['/x/new.apk']);
+      expect(find.byType(AlertDialog), findsNothing);
       expect(find.textContaining('· Update ready 0.3.0 (6)'), findsOneWidget);
       expect(find.byKey(const Key('changelog.install')), findsOneWidget);
       await unmount(tester);
     });
 
     testWidgets('an APK downloaded before a restart is reused', (tester) async {
-      final calls = fakeUpdate();
+      final installed = <String>[];
+      final calls = fakeUpdate(installed: installed);
       UpdateService.instance.prefsOverride = {
         'update_downloaded_apk': '{"version":"0.3.0+6","path":"/x/old.apk"}',
       };
       await pumpApp(tester);
       expect(calls, isNot(contains('startBackgroundDownload')));
-      expect(find.text('Update ready'), findsOneWidget);
+      expect(installed, ['/x/old.apk']);
+      expectNothingPoppedUp();
       await unmount(tester);
     });
   });
 
   group('About page', () {
-    testWidgets('check, then download & install the newer build',
+    testWidgets(
+        'check, then Download & install hands it to the silent download',
         (tester) async {
       UpdateService.instance.fetchOverride =
           (_) async => releasesJson(['0.2.1+3', '0.3.0+6']);
-      final installed = <String>[];
-      UpdateService.instance.channelOverride = (method, args) async {
-        switch (method) {
-          case 'startBackgroundDownload':
-            return {'downloadId': 1};
-          case 'queryDownload':
-            return {'status': 'successful', 'localPath': '/x/new.apk'};
-          case 'installApk':
-            installed.add(args['path'] as String);
-            return 'ok';
-        }
-        return null;
-      };
+      final asked = <String>[];
+      AutoUpdateChecker.instance.onInstallVersion =
+          (info) => asked.add(info.version);
 
       // Set in this zone: awaiting a future made in setUp never resumes here.
       AppVersion.setForTest('0.2.2', '4');
@@ -564,8 +666,26 @@ void main() {
       await tester.ensureVisible(find.textContaining('Download & install'));
       await tester.tap(find.textContaining('Download & install'));
       await tester.pumpAndSettle();
-      expect(installed, ['/x/new.apk']);
+      expect(asked, ['0.3.0+6']);
+      // Only a passive line while it downloads — no progress bar.
+      AutoUpdateChecker.instance.setDownloading('0.3.0+6', 0.4);
+      await tester.pump();
+      expect(find.text('Downloading 0.3.0+6 in the background… 40%'),
+          findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(Dialog), findsNothing);
+      AutoUpdateChecker.instance
+        ..setDownloading(null)
+        ..readyVersion = '0.3.0+6';
+      await tester.pump();
       expect(find.text('Version 0.3.0+6 downloaded.'), findsOneWidget);
+
+      await tester.ensureVisible(find.textContaining('Go back to 0.2.1+3'));
+      await tester.tap(find.textContaining('Go back to 0.2.1+3'));
+      await tester.pumpAndSettle();
+      expect(asked, ['0.3.0+6', '0.2.1+3']);
+      expect(find.textContaining('Going back to 0.2.1+3'), findsOneWidget);
+      AutoUpdateChecker.instance.onInstallVersion = null;
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('says so when already up to date', (tester) async {
@@ -657,8 +777,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(statusText(tester),
           startsWith('Current version 0.2.2 (4) · Up to date'));
-      expect(statusText(tester),
-          contains(' · Pull down to check for updates'));
+      expect(statusText(tester), contains(' · Pull down to check for updates'));
       expect(find.byKey(const Key('changelog.install')), findsNothing);
     });
 
@@ -673,8 +792,7 @@ void main() {
       UpdateService.instance.prefsOverride = {
         'update_download_times': '{"0.2.2+4":"2026-10-12T11:20:00.000"}',
       };
-      await openChangelog(tester,
-          updateTime: DateTime(2026, 10, 12, 11, 25));
+      await openChangelog(tester, updateTime: DateTime(2026, 10, 12, 11, 25));
       expect(statusText(tester),
           contains('Downloaded 12.10.26 11:20 · Installed 12.10.26 11:25'));
       expect(statusText(tester), isNot(contains('null')));
@@ -691,8 +809,7 @@ void main() {
           '0.2.2+4');
     });
 
-    testWidgets('a downloaded newer build is ready to install',
-        (tester) async {
+    testWidgets('a downloaded newer build is ready to install', (tester) async {
       UpdateService.instance.prefsOverride = {
         'update_download_times': '{"0.3.0+6":"2026-10-12T14:02:00.000"}',
       };
@@ -709,9 +826,29 @@ void main() {
       expect(installs, 1);
     });
 
+    testWidgets('a silent download shows only in the status line',
+        (tester) async {
+      UpdateService.instance.fetchOverride =
+          (_) async => releasesJson(['0.2.2+4', '0.3.0+6']);
+      AutoUpdateChecker.instance.onInstall = () {};
+      await pullDown(tester);
+      expect(find.byKey(const Key('changelog.install')), findsOneWidget);
+      AutoUpdateChecker.instance.setDownloading('0.3.0+6', 0.5);
+      await tester.pump();
+      expect(statusText(tester),
+          contains('Current version 0.2.2 (4) · Downloading 0.3.0 (6)… 50%'));
+      expect(find.byKey(const Key('changelog.install')), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+    });
+
     testWidgets('one card per release; the installed one is checked',
         (tester) async {
       await openChangelog(tester, version: '0.4.3');
+      // Newer entries above it can push it below the fold.
+      await tester.scrollUntilVisible(find.text('0.4.3'), 200,
+          scrollable: find.descendant(
+              of: find.byKey(const Key('changelog.list')),
+              matching: find.byType(Scrollable)));
       expect(find.text('0.4.3'), findsOneWidget);
       expect(find.text('12.10.26'), findsWidgets);
       final installed = find.byKey(const Key('changelog.installed'));
