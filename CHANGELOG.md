@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.9] - 2026-10-14
+- Changelog: the version card shows the version and channel on top, then Downloaded, Installed and Last check with their dates lined up in one column; no icon and no pull-down hint
+
 ## [0.4.8] - 2026-10-12
 - Updates: when an update is installed, Android shows "App updated" with an Open button again, so you are back in the app with one tap
 

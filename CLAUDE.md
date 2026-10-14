@@ -92,8 +92,10 @@ APK).
   Cancelled: the slim `UpdateBanner` on the home screen (`collage_page.dart`)
   offers Install; a failed download offers Try again. A tap that starts a
   download shows one SnackBar. The Changelog shows the package's
-  `UpdateStatusCard` (downloaded / installed / last checked, a waiting
-  build), pull-down checks, tapping a version offers its download (older =
+  `UpdateStatusCard` ("Version x.y.z (build) · channel" on top, a status
+  line only when not up to date, then Downloaded: / Installed: / Last
+  check: with the times lined up in one column, a waiting build; no icon,
+  no pull-down hint), pull-down checks, tapping a version offers its download (older =
   rollback). About and Settings › Updates have "Check for updates".
   The package's default behaviour is the app's behaviour: coming back to
   the app checks when the last check is 15+ minutes old; GitHub's anonymous

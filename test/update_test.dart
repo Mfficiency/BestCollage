@@ -508,12 +508,16 @@ void main() {
       await tester.pump();
     }
 
-    String statusText(WidgetTester tester) {
-      final tile = tester.widget<ListTile>(find.descendant(
-          of: find.byKey(const Key('changelog.status')),
-          matching: find.byType(ListTile)));
-      return '${(tile.title as Text).data}\n${(tile.subtitle as Text).data}';
-    }
+    /// Every line of the card, top to bottom ("Downloaded:" and its time
+    /// are separate cells of the time table).
+    List<String> statusLines(WidgetTester tester) => tester
+        .widgetList<Text>(find.descendant(
+            of: find.byKey(const Key('changelog.status')),
+            matching: find.byType(Text)))
+        .map((t) => t.data ?? '')
+        .toList();
+
+    String statusText(WidgetTester tester) => statusLines(tester).join('\n');
 
     testWidgets('the card: downloaded, installed, last checked',
         (tester) async {
@@ -529,12 +533,26 @@ void main() {
         }),
       });
       await openChangelog(tester);
-      final text = statusText(tester);
-      expect(text, startsWith('Current version 0.2.2 (4) · Up to date'));
-      expect(text,
-          contains('Downloaded 12.10.26 11:20 · Installed 12.10.26 11:25'));
-      expect(
-          text, contains('Last checked 12.10.26 11:28 · Pull down to check'));
+      final lines = statusLines(tester);
+      expect(lines.first, startsWith('Version 0.2.2 (4) · '));
+      // Up to date: no status line, no pull-down hint.
+      expect(lines, isNot(contains('Up to date')));
+      expect(statusText(tester), isNot(contains('Pull down')));
+      expect(lines.sublist(1), [
+        'Downloaded:',
+        '12.10.26 11:20',
+        'Installed:',
+        '12.10.26 11:25',
+        'Last check:',
+        '12.10.26 11:28',
+      ]);
+      // The times line up in one column.
+      final x = [
+        '12.10.26 11:20',
+        '12.10.26 11:25',
+        '12.10.26 11:28',
+      ].map((t) => tester.getTopLeft(find.text(t)).dx).toSet();
+      expect(x, hasLength(1));
     });
 
     testWidgets('without a record, installed = first start', (tester) async {
@@ -542,10 +560,14 @@ void main() {
       now = DateTime(2026, 10, 12, 9, 5);
       await makeUpdates();
       await openChangelog(tester);
-      final text = statusText(tester);
-      expect(text, contains('Installed 12.10.26 09:05'));
-      expect(text, isNot(contains('Downloaded')));
-      expect(text, contains('Not checked yet'));
+      final lines = statusLines(tester);
+      expect(lines.sublist(1), [
+        'Installed:',
+        '12.10.26 09:05',
+        'Last check:',
+        'Not checked yet',
+      ]);
+      expect(find.text('Downloaded:'), findsNothing);
     });
 
     testWidgets(
