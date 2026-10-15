@@ -74,6 +74,13 @@ APK).
   `CollageController.toJson()` / `restore()`. Tests use `MemoryCollageStore`
   (set `CollageStore.instance` in `setUp` for anything that builds
   `CollagePage`).
+- Save in `collage_page.dart`: while it renders, a save that looks like
+  taking more than 30 s shows "Saving · hh:mm:ss remaining" below the app
+  bar (`RemainingTimeText`, `lib/src/ui/widgets/remaining_time_text.dart`,
+  on the package's `RemainingTime`; refreshed every second). It counts down
+  from the last render time at that size (`AppSettings.saveMillis`, scaled
+  by pixels for another size; `typicalSave`), or goes by the steps the first
+  time. `CollagePage(clock:)` lets tests fake the time.
 - `collage_history_page.dart` — the "Previous collages" grid; returns the
   tapped entry to `CollagePage`, which reopens it.
 - In-app updates: the shared package `packages/mfficiency_updates`

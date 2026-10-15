@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.10] - 2026-10-15
+- Saving a big collage that takes more than 30 seconds shows roughly how much time is left (hh:mm:ss remaining) below the app bar, counted down from how long the last save took; app update downloads show it too
+
 ## [0.4.9] - 2026-10-14
 - Changelog: the version card shows the version and channel on top, then Downloaded, Installed and Last check with their dates lined up in one column; no icon and no pull-down hint
 
