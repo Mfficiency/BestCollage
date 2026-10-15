@@ -103,7 +103,10 @@ APK).
   line only when not up to date, then Downloaded: / Installed: / Last
   check: with the times lined up in one column, a waiting build; no icon,
   no pull-down hint), pull-down checks, tapping a version offers its download (older =
-  rollback). About and Settings › Updates have "Check for updates".
+  rollback). Each version card shows the package's `ReleaseBuildInfo`
+  (built at, build time, APK size from that version's GitHub release:
+  notes footer + asset size; the CHANGELOG.md build lines as fallback,
+  never both); opening the page reads the release list once. About and Settings › Updates have "Check for updates".
   The package's default behaviour is the app's behaviour: coming back to
   the app checks when the last check is 15+ minutes old; GitHub's anonymous
   limit (60/hour) — a 429, or a 403 without a token — pauses the automatic
