@@ -9,7 +9,10 @@ import 'subpage_app_bar.dart';
 /// ordered that way; `tool/bump_version.dart` prepends new entries for you)
 /// as one card per release, like Hally Remote, under the updates package's
 /// status card: the running version, when it was downloaded and installed,
-/// a newer one downloaded and waiting, and the last check.
+/// a newer one downloaded and waiting, and the last check. Each card shows
+/// when that version was built, how long the build took and the APK's size
+/// (the package's [ReleaseBuildInfo], from the GitHub releases; the build
+/// lines of CHANGELOG.md as the fallback).
 ///
 /// Pulling down checks for a newer build (any channel) right away; one
 /// that is found downloads silently in the background (only the status card
@@ -186,17 +189,28 @@ class _ReleaseCard extends StatelessWidget {
                 ],
               ),
               for (final item in release.items) _Bullet(item),
-              if (release.buildNotes.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final (label, value) in release.buildNotes)
-                      _BuildChip(label, value),
-                  ],
-                ),
-              ],
+              // When this version was built, how long the build took and
+              // the APK's size, from its GitHub release; the CHANGELOG.md
+              // build lines while the releases load or when the release
+              // says nothing (never both).
+              ReleaseBuildInfo(
+                key: Key('changelog.build.${release.title}'),
+                controller: AppUpdates.instance.controller,
+                version: release.title,
+                fallback: release.buildNotes.isEmpty
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final (label, value) in release.buildNotes)
+                              _BuildChip(label, value),
+                          ],
+                        ),
+                      ),
+              ),
             ],
           ),
         ),

@@ -46,6 +46,7 @@ export 'src/ui/settings_page.dart';
 export 'src/ui/startup_times_page.dart';
 export 'src/ui/subpage_app_bar.dart';
 export 'src/ui/test_results_page.dart';
+export 'src/ui/widgets/remaining_time_text.dart';
 export 'src/ui/widgets/settings_section.dart';
 export 'src/ui/widgets/spacing.dart';
 export 'src/ui/widgets/version_banner.dart';

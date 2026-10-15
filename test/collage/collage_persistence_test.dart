@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -401,6 +402,48 @@ void main() {
       expect(saved, 2);
       expect(store.history, hasLength(1));
       expect(store.history.first.state['border'], 20);
+    });
+
+    testWidgets('a long save shows roughly how long is left', (tester) async {
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      AppSettings.instance
+        ..resetForTest()
+        ..exportLongEdge = 1080
+        ..saveMillis = {1080: 60000};
+      addTearDown(AppSettings.instance.resetForTest);
+      var now = DateTime(2026, 10, 15, 12);
+      final rendering = Completer<Uint8List>();
+      final c = CollageController()..addPhotos(pathPhotos(2));
+      await tester.pumpWidget(MaterialApp(
+        home: CollagePage(
+          controller: c,
+          store: store,
+          clock: () => now,
+          renderer: (boundary, edge) =>
+              edge == 1080 ? rendering.future : Future.value(Uint8List(1)),
+          saver: (png) async => 'Gallery',
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('remaining_time')), findsNothing);
+
+      now = now.add(const Duration(seconds: 4));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Saving · 00:00:56 remaining'), findsOneWidget);
+
+      now = now.add(const Duration(seconds: 36));
+      rendering.complete(Uint8List(1));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('remaining_time')), findsNothing);
+      expect(find.text('Saved to Gallery'), findsOneWidget);
+      // Remembered for next time.
+      expect(AppSettings.instance.saveMillis, {1080: 40000});
     });
 
     testWidgets('the drawer opens previous collages', (tester) async {

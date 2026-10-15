@@ -53,6 +53,21 @@ class AppSettings extends ChangeNotifier {
   int exportLongEdge = exportSizes[1];
   bool dateStampByDefault = false;
 
+  /// How long rendering a collage took last time, per long edge (ms). Only
+  /// for the rough "remaining" while saving; not shown in Settings.
+  Map<int, int> saveMillis = {};
+
+  /// The usual render time for [longEdge]: the last one at that size, else
+  /// the last one at another size scaled by the pixel count; null if none.
+  Duration? typicalSave(int longEdge) {
+    final exact = saveMillis[longEdge];
+    if (exact != null) return Duration(milliseconds: exact);
+    if (saveMillis.isEmpty) return null;
+    final MapEntry(key: edge, value: ms) = saveMillis.entries.last;
+    final scale = (longEdge / edge) * (longEdge / edge);
+    return Duration(milliseconds: (ms * scale).round());
+  }
+
   // --- Updates --------------------------------------------------------------
   /// Poll GitHub every 15 minutes while the app is open and offer to download
   /// and install a newer build from any channel (Android only).
@@ -117,6 +132,9 @@ class AppSettings extends ChangeNotifier {
         'quietHoursEndMinutes': quietHoursEndMinutes,
         'exportLongEdge': exportLongEdge,
         'dateStampByDefault': dateStampByDefault,
+        'saveMillis': {
+          for (final e in saveMillis.entries) '${e.key}': e.value,
+        },
         'autoUpdateCheckEnabled': autoUpdateCheckEnabled,
       };
 
@@ -160,6 +178,14 @@ class AppSettings extends ChangeNotifier {
         data['dateStampByDefault'] as bool? ?? dateStampByDefault;
     autoUpdateCheckEnabled =
         data['autoUpdateCheckEnabled'] as bool? ?? autoUpdateCheckEnabled;
+    final save = data['saveMillis'];
+    if (save is Map) {
+      saveMillis = {
+        for (final e in save.entries)
+          if (int.tryParse('${e.key}') case final edge?)
+            if (e.value is num) edge: (e.value as num).round(),
+      };
+    }
   }
 
   /// Resets to defaults (used between tests).
@@ -176,6 +202,7 @@ class AppSettings extends ChangeNotifier {
     quietHoursEndMinutes = AppConfig.quietHoursEndMinutes;
     exportLongEdge = exportSizes[1];
     dateStampByDefault = false;
+    saveMillis = {};
     autoUpdateCheckEnabled = true;
   }
 }
