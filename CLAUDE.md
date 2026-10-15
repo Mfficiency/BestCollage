@@ -74,6 +74,13 @@ APK).
   `CollageController.toJson()` / `restore()`. Tests use `MemoryCollageStore`
   (set `CollageStore.instance` in `setUp` for anything that builds
   `CollagePage`).
+- Save in `collage_page.dart`: while it renders, a save that looks like
+  taking more than 30 s shows "Saving · hh:mm:ss remaining" below the app
+  bar (`RemainingTimeText`, `lib/src/ui/widgets/remaining_time_text.dart`,
+  on the package's `RemainingTime`; refreshed every second). It counts down
+  from the last render time at that size (`AppSettings.saveMillis`, scaled
+  by pixels for another size; `typicalSave`), or goes by the steps the first
+  time. `CollagePage(clock:)` lets tests fake the time.
 - `collage_history_page.dart` — the "Previous collages" grid; returns the
   tapped entry to `CollagePage`, which reopens it.
 - In-app updates: the shared package `packages/mfficiency_updates`
@@ -92,9 +99,14 @@ APK).
   Cancelled: the slim `UpdateBanner` on the home screen (`collage_page.dart`)
   offers Install; a failed download offers Try again. A tap that starts a
   download shows one SnackBar. The Changelog shows the package's
-  `UpdateStatusCard` (downloaded / installed / last checked, a waiting
-  build), pull-down checks, tapping a version offers its download (older =
-  rollback). About and Settings › Updates have "Check for updates".
+  `UpdateStatusCard` ("Version x.y.z (build) · channel" on top, a status
+  line only when not up to date, then Downloaded: / Installed: / Last
+  check: with the times lined up in one column, a waiting build; no icon,
+  no pull-down hint), pull-down checks, tapping a version offers its download (older =
+  rollback). Each version card shows the package's `ReleaseBuildInfo`
+  (built at, build time, APK size from that version's GitHub release:
+  notes footer + asset size; the CHANGELOG.md build lines as fallback,
+  never both); opening the page reads the release list once. About and Settings › Updates have "Check for updates".
   The package's default behaviour is the app's behaviour: coming back to
   the app checks when the last check is 15+ minutes old; GitHub's anonymous
   limit (60/hour) — a 429, or a 403 without a token — pauses the automatic

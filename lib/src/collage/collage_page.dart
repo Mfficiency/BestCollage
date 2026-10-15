@@ -3,12 +3,14 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:mfficiency_updates/mfficiency_updates.dart' show RemainingTime;
 
 import '../app_config.dart';
 import '../app_settings.dart';
 import '../services/app_updates.dart';
 import '../services/log_service.dart';
 import '../ui/app_drawer.dart';
+import '../ui/widgets/remaining_time_text.dart';
 import 'collage_canvas.dart';
 import 'collage_controller.dart';
 import 'collage_history_page.dart';
@@ -46,6 +48,9 @@ class CollagePage extends StatefulWidget {
   final PictureSaver? saver;
   final PictureRenderer? renderer;
 
+  /// The clock behind the "remaining" estimates (tests pass a fake one).
+  final DateTime Function()? clock;
+
   const CollagePage({
     super.key,
     this.picker,
@@ -54,6 +59,7 @@ class CollagePage extends StatefulWidget {
     this.resolver,
     this.saver,
     this.renderer,
+    this.clock,
   });
 
   @override
@@ -72,6 +78,13 @@ class _CollagePageState extends State<CollagePage> {
   bool _restoring = true;
   List<CollageHistoryEntry> _history = const [];
   Timer? _draftTimer;
+
+  /// A save running now, for the rough
+  /// "hh:mm:ss remaining" below its progress; null when there is none.
+  RemainingTime? _eta;
+  String _etaWhat = '';
+  double? _etaDone;
+  Duration? _etaTypical;
 
   static const _draftDelay = Duration(milliseconds: 400);
   static const int _thumbnailEdge = 480;
@@ -115,6 +128,24 @@ class _CollagePageState extends State<CollagePage> {
   Future<void> _refreshHistory() async {
     final history = await _store.loadHistory();
     if (mounted) setState(() => _history = history);
+  }
+
+  void _startEta(String what, {double? done, Duration? typical}) {
+    if (!mounted) return;
+    setState(() {
+      _eta = RemainingTime(clock: widget.clock)..start();
+      _etaWhat = what;
+      _etaDone = done;
+      _etaTypical = typical;
+    });
+  }
+
+  void _etaProgress(double done) {
+    if (mounted && _eta != null) setState(() => _etaDone = done);
+  }
+
+  void _stopEta() {
+    if (mounted && _eta != null) setState(() => _eta = null);
   }
 
   void _onChanged() {
@@ -247,12 +278,28 @@ class _CollagePageState extends State<CollagePage> {
           as RenderRepaintBoundary?;
       if (boundary == null) throw StateError('collage not on screen');
       final render = widget.renderer ?? CollageSaver.render;
-      final png = await render(boundary, AppSettings.instance.exportLongEdge);
+      final settings = AppSettings.instance;
+      final edge = settings.exportLongEdge;
+      // Rendering is the slow part: count down from how long it took last
+      // time, or (the first time) go by the steps.
+      final typical = settings.typicalSave(edge);
+      _startEta('Saving', done: typical == null ? 0 : null, typical: typical);
+      final png = await render(boundary, edge);
+      if (typical == null) _etaProgress(0.9);
       Uint8List? thumb;
       try {
         thumb = await render(boundary, _thumbnailEdge);
       } catch (e) {
         LogService.add('save', 'no thumbnail: $e');
+      }
+      final took = _eta?.elapsed;
+      _stopEta();
+      if (took != null) {
+        // Re-added so it counts as the latest for other sizes.
+        settings.saveMillis = Map.of(settings.saveMillis)
+          ..remove(edge)
+          ..[edge] = took.inMilliseconds;
+        unawaited(settings.save());
       }
       c.exporting = false;
       c.changed();
@@ -275,6 +322,7 @@ class _CollagePageState extends State<CollagePage> {
     } finally {
       c.exporting = false;
       c.changed();
+      _stopEta();
       if (mounted) setState(() => _saving = false);
     }
   }
@@ -333,6 +381,15 @@ class _CollagePageState extends State<CollagePage> {
           // Android's dialog was cancelled, Try again after a failed
           // download; nothing otherwise.
           UpdateBanner(controller: AppUpdates.instance.controller),
+          // A save that looks like taking more than 30 s: roughly how long
+          // it still takes.
+          if (_eta case final eta?)
+            RemainingTimeText(
+              eta: eta,
+              done: _etaDone,
+              typical: _etaTypical,
+              prefix: '$_etaWhat · ',
+            ),
           Expanded(
             child: _restoring
                 ? const Center(child: CircularProgressIndicator())

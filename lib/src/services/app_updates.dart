@@ -13,6 +13,7 @@ import 'log_service.dart';
 
 export 'package:mfficiency_updates/mfficiency_updates.dart'
     show
+        ReleaseBuildInfo,
         UpdateBanner,
         UpdateCheckTileText,
         UpdateController,

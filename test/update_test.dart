@@ -24,7 +24,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// One GitHub releases-API entry for [version] (`x.y.z+build`) on [channel].
 Map<String, Object?> release(String version,
-    {String channel = 'main', bool draft = false, String prefix = 'v'}) {
+    {String channel = 'main',
+    bool draft = false,
+    String prefix = 'v',
+    String? body,
+    int? size}) {
   final parts = version.split('+');
   final suffix = channel == 'main' ? '' : '-$channel';
   final tag = '$prefix${parts[0]}-${parts[1]}$suffix';
@@ -33,9 +37,11 @@ Map<String, Object?> release(String version,
     'prerelease': channel != 'main',
     'draft': draft,
     'html_url': 'https://github.com/x/releases/tag/$tag',
+    if (body != null) 'body': body,
     'assets': [
       {
         'name': 'BestCollage-${parts[0]}-${parts[1]}$suffix.apk',
+        if (size != null) 'size': size,
         'url': 'https://api.github.com/repos/x/releases/assets/1',
         'browser_download_url': 'https://github.com/x/download/$tag/a.apk',
       },
@@ -508,12 +514,16 @@ void main() {
       await tester.pump();
     }
 
-    String statusText(WidgetTester tester) {
-      final tile = tester.widget<ListTile>(find.descendant(
-          of: find.byKey(const Key('changelog.status')),
-          matching: find.byType(ListTile)));
-      return '${(tile.title as Text).data}\n${(tile.subtitle as Text).data}';
-    }
+    /// Every line of the card, top to bottom ("Downloaded:" and its time
+    /// are separate cells of the time table).
+    List<String> statusLines(WidgetTester tester) => tester
+        .widgetList<Text>(find.descendant(
+            of: find.byKey(const Key('changelog.status')),
+            matching: find.byType(Text)))
+        .map((t) => t.data ?? '')
+        .toList();
+
+    String statusText(WidgetTester tester) => statusLines(tester).join('\n');
 
     testWidgets('the card: downloaded, installed, last checked',
         (tester) async {
@@ -529,12 +539,26 @@ void main() {
         }),
       });
       await openChangelog(tester);
-      final text = statusText(tester);
-      expect(text, startsWith('Current version 0.2.2 (4) · Up to date'));
-      expect(text,
-          contains('Downloaded 12.10.26 11:20 · Installed 12.10.26 11:25'));
-      expect(
-          text, contains('Last checked 12.10.26 11:28 · Pull down to check'));
+      final lines = statusLines(tester);
+      expect(lines.first, startsWith('Version 0.2.2 (4) · '));
+      // Up to date: no status line, no pull-down hint.
+      expect(lines, isNot(contains('Up to date')));
+      expect(statusText(tester), isNot(contains('Pull down')));
+      expect(lines.sublist(1), [
+        'Downloaded:',
+        '12.10.26 11:20',
+        'Installed:',
+        '12.10.26 11:25',
+        'Last check:',
+        '12.10.26 11:28',
+      ]);
+      // The times line up in one column.
+      final x = [
+        '12.10.26 11:20',
+        '12.10.26 11:25',
+        '12.10.26 11:28',
+      ].map((t) => tester.getTopLeft(find.text(t)).dx).toSet();
+      expect(x, hasLength(1));
     });
 
     testWidgets('without a record, installed = first start', (tester) async {
@@ -542,10 +566,14 @@ void main() {
       now = DateTime(2026, 10, 12, 9, 5);
       await makeUpdates();
       await openChangelog(tester);
-      final text = statusText(tester);
-      expect(text, contains('Installed 12.10.26 09:05'));
-      expect(text, isNot(contains('Downloaded')));
-      expect(text, contains('Not checked yet'));
+      final lines = statusLines(tester);
+      expect(lines.sublist(1), [
+        'Installed:',
+        '12.10.26 09:05',
+        'Last check:',
+        'Not checked yet',
+      ]);
+      expect(find.text('Downloaded:'), findsNothing);
     });
 
     testWidgets(
@@ -554,13 +582,18 @@ void main() {
       AppVersion.setForTest('0.2.2', '4');
       await makeUpdates();
       await openChangelog(tester);
-      expect(github.requests, isEmpty, reason: 'not started: no auto check');
+      // Opening reads the release list once (the build facts per version);
+      // no update check: not started, no auto check.
+      expect(github.requests, hasLength(1));
+      expect(native.installs, isEmpty);
+      github.requests.clear();
       await tester.fling(
           find.byKey(const Key('changelog.list')), const Offset(0, 400), 1000);
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 200));
       }
-      expect(github.requests, hasLength(1));
+      // The check, then the release list read again for the build facts.
+      expect(github.requests, isNotEmpty);
       expect(native.installs, ['/cache/BestCollage-0.3.0-6.apk']);
       expect(find.byType(AlertDialog), findsNothing);
       final text = statusText(tester);
@@ -594,6 +627,37 @@ void main() {
       expect(native.installs, ['/cache/BestCollage-0.4.4-12.apk']);
       await tester.pumpAndSettle();
       expectNothingPoppedUpIn(tester);
+    });
+
+    testWidgets('each version shows when it was built, the build time and '
+        'the APK size from its release', (tester) async {
+      github.body = [
+        release('0.4.4+12',
+            body: '- Fixes\n\nBuilt: 2026-10-14 09:30 in 3m 5s\n'
+                'APK size: 19.4 MB',
+            size: 20342374),
+        release('0.4.5+13'),
+      ];
+      AppVersion.setForTest('0.4.5', '13');
+      await makeUpdates(phone: false);
+      await openChangelog(tester);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      final facts = find.byKey(const Key('changelog.build.0.4.4'));
+      await tester.scrollUntilVisible(facts, 200,
+          scrollable: find.descendant(
+              of: find.byKey(const Key('changelog.list')),
+              matching: find.byType(Scrollable)));
+      List<String> texts(Finder f) => tester
+          .widgetList<Text>(find.descendant(of: f, matching: find.byType(Text)))
+          .map((t) => t.data ?? '')
+          .toList();
+      expect(texts(facts),
+          ['Built 14.10.26 09:30', 'Build time 3m 05s', 'APK 19.4 MB']);
+      // No release with build facts and no CHANGELOG.md build lines: nothing.
+      expect(texts(find.byKey(const Key('changelog.build.0.4.3'))), isEmpty);
+      expect(github.requests, hasLength(1), reason: 'read once, cached');
     });
 
     testWidgets('one card per release; the installed one is checked',
