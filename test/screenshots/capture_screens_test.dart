@@ -8,6 +8,7 @@ import 'package:best_collage/best_collage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mfficiency_updates/mfficiency_updates.dart' show UpdateHttp;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
@@ -40,6 +41,11 @@ void main() {
     final dir = Directory.systemTemp.createTempSync('best_collage_shots');
     PathProviderPlatform.instance = _FakePathProvider(dir.path);
     CollageStore.instance = MemoryCollageStore();
+    // The Changelog reads the GitHub releases (build facts per version):
+    // offline here, an empty list.
+    AppUpdates.resetForTest();
+    AppUpdates.instance = AppUpdates.create(
+        http: UpdateHttp.from((url, headers, cacheFor) async => const []));
   });
 
   testWidgets('capture every screen', (tester) async {

@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.11] - 2026-10-15
+- Changelog: every version shows when it was built, how long the build took and the size of its APK, taken from its GitHub release (the shared update module is now 1.5.0)
+
 ## [0.4.10] - 2026-10-15
 - Saving a big collage that takes more than 30 seconds shows roughly how much time is left (hh:mm:ss remaining) below the app bar, counted down from how long the last save took; app update downloads show it too
 
