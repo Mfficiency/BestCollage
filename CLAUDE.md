@@ -1,5 +1,16 @@
 # CLAUDE.md — AI working guide for BestCollage
 
+## Every request ends on `dev` (standing rule from the owner)
+
+Any request that changes files is finished only when the work is **merged into
+`dev` and pushed**, without being asked: commit on the working branch, merge
+`origin/dev` into it (resolve conflicts, keep both sides' intent), run the repo's
+checks, then merge the branch into `dev` and `git push origin dev`. Report the
+`dev` commit. `staging`/`main` only when the request says so. If the merge or
+push can't be done, say exactly why. `.claude/hooks/require-merged-to-dev.sh` (a Stop
+hook in `.claude/settings.json`) blocks stopping while commits or tracked changes
+are not on `dev`.
+
 Flutter collage app (1–4 photos → one picture). Android-first; Windows desktop
 for tests. Built from the BestToDo app template
 (`D:\Code\best_todo_2\template\app_template`) — same theme, drawer and
