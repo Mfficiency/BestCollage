@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.12] - 2026-10-21
+- Border: a new Frame slider adds a white frame around the outside of the collage. The photos get smaller to make room for it, nothing is covered
+
 ## [0.4.11] - 2026-10-15
 - Changelog: every version shows when it was built, how long the build took and the size of its APK, taken from its GitHub release (the shared update module is now 1.5.0)
 

@@ -319,6 +319,17 @@ class _LayoutPanel extends StatelessWidget {
           },
         ),
         _SliderRow(
+          label: 'Frame',
+          value: c.frame,
+          min: 0,
+          max: CollageController.maxFrame,
+          display: (v) => v.round().toString(),
+          onChanged: (v) {
+            c.frame = v;
+            c.changed();
+          },
+        ),
+        _SliderRow(
           label: 'Corners',
           value: c.cornerRadius,
           min: 0,

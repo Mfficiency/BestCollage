@@ -50,6 +50,7 @@ CollageController editedCollage() {
   c
     ..shape = CanvasShape.all.firstWhere((s) => s.label == '9:16')
     ..border = 14
+    ..frame = 20
     ..cornerRadius = 9
     ..borderColor = borderColors[2]
     ..showDates = true
@@ -98,6 +99,7 @@ void main() {
       expect(c.shape.label, '9:16');
       expect(identical(c.shape, CanvasShape.all[3]), isTrue);
       expect(c.border, 14);
+      expect(c.frame, 20);
       expect(c.cornerRadius, 9);
       expect(c.borderColor, borderColors[2]);
       expect(c.showDates, isTrue);
@@ -145,12 +147,14 @@ void main() {
       final saved = editedCollage().toJson()
         ..['layout'] = {'axis': 'diagonal'}
         ..['border'] = 500
+        ..['frame'] = 500
         ..['borderColor'] = 0x12345678;
       final c = CollageController();
       c.restore(saved, reload(saved));
       expect(c.preset.id, '3-top');
       expect((c.layout as SplitNode).ratio, 0.6);
       expect(c.border, 24);
+      expect(c.frame, CollageController.maxFrame);
       expect(c.borderColor, borderColors.first);
     });
 
@@ -161,7 +165,15 @@ void main() {
       expect(r.isEmpty, isTrue);
       expect(r.shape.label, '9:16');
       expect(r.border, 14);
+      expect(r.frame, 20);
       expect(r.historyId, isNull);
+    });
+
+    test('a collage saved before the frame existed has none', () {
+      final saved = editedCollage().toJson()..remove('frame');
+      final c = CollageController()..frame = 30;
+      c.restore(saved, reload(saved));
+      expect(c.frame, 0);
     });
   });
 

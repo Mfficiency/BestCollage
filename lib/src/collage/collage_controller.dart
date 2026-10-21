@@ -21,6 +21,13 @@ class CollageController extends ChangeNotifier {
   double cornerRadius = 0;
   Color borderColor = borderColors.first;
 
+  /// Width of a white frame around the outside of the collage (logical px at
+  /// preview scale, like [border]). It sits outside the border and shrinks
+  /// the photos rather than covering them.
+  double frame = 0;
+  static const double maxFrame = 48;
+  static const Color frameColor = Color(0xFFFFFFFF);
+
   final Adjustments globalAdjustments = Adjustments();
   ColorScope colorScope = ColorScope.all;
 
@@ -181,7 +188,7 @@ class CollageController extends ChangeNotifier {
   static const int _stateVersion = 1;
 
   /// The whole collage as JSON: layout with divider positions, shape, border,
-  /// colours, date stamps and every photo's crop and edits. Photos are
+  /// frame, colours, date stamps and every photo's crop and edits. Photos are
   /// referenced by file path.
   Map<String, dynamic> toJson() => {
         'version': _stateVersion,
@@ -192,6 +199,7 @@ class CollageController extends ChangeNotifier {
         'border': border,
         'cornerRadius': cornerRadius,
         'borderColor': borderColor.toARGB32(),
+        'frame': frame,
         'globalAdjustments': globalAdjustments.toJson(),
         'colorScope': colorScope.name,
         'showDates': showDates,
@@ -248,6 +256,7 @@ class CollageController extends ChangeNotifier {
     border = jsonDouble(state['border'], 0, 24) ?? border;
     cornerRadius = jsonDouble(state['cornerRadius'], 0, 32) ?? cornerRadius;
     borderColor = _color(state['borderColor'], borderColors) ?? borderColor;
+    frame = jsonDouble(state['frame'], 0, maxFrame) ?? 0;
     globalAdjustments
       ..reset()
       ..applyJson(state['globalAdjustments']);
