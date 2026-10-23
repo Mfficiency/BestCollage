@@ -1,7 +1,7 @@
 # Changelog
 
 ## [0.4.13] - 2026-10-23
-- Settings › Data: Back up everything saves all your collages (the draft, Previous collages and the photos in them), settings and startup times as one file in Download/BestCollage/Backups, which stays even if the app is uninstalled (the newest 4 are kept). Restore from a backup brings it all back; a new install offers that once. Android only (the shared update module is now 1.6.0)
+- Settings › Data: Back up everything saves all your collages (the draft, Previous collages and the photos in them), settings and startup times as one file in Download/BestCollage/Backups, which stays even if the app is uninstalled (the newest 4 are kept), and one is made automatically before every update. Restore from a backup brings it all back; a new install offers that once. Android only (the shared update module is now 1.6.0)
 
 ## [0.4.12] - 2026-10-21
 - Border: a new Frame slider adds a white frame around the outside of the collage. The photos get smaller to make room for it, nothing is covered

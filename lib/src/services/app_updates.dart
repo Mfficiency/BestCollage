@@ -44,8 +44,8 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 ///   photo copies, `settings.json`, the startup times, the preferences) as
 ///   one file in `Download/BestCollage/Backups/`, which stays when the app
 ///   is uninstalled. "Back up everything" / "Restore from a backup" in
-///   Settings › Data, and a one-time restore offer on a new install.
-///   Not yet run before updates (no `beforeInstall`).
+///   Settings › Data, a one-time restore offer on a new install, and one
+///   before every update (`beforeInstall`).
 class AppUpdates {
   AppUpdates._(this.controller, this.backup);
 
@@ -123,6 +123,7 @@ class AppUpdates {
       http: http,
       downloader: downloader,
       platform: updatePlatform,
+      beforeInstall: backup?.beforeUpdate,
       strings: (_) => strings,
       log: (level, event, data) => LogService.add(
           'update', data.isEmpty ? event : '$event ${jsonEncode(data)}'),

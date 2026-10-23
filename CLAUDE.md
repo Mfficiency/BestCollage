@@ -144,7 +144,7 @@ APK).
   history, thumbs, photo copies; `settings.json`; startup times), support
   and external folders, and SharedPreferences. Settings › Data shows
   `FullBackupTiles`; `CollageAppState` calls `offerRestore` once after the
-  first frame. Not yet wired as `beforeInstall`. Android only.
+  first frame, and before every update (`beforeInstall`). Android only.
   Android: nothing in the app (`MainActivity` is a plain FlutterActivity);
   the plugin brings `REQUEST_INSTALL_PACKAGES`, its install receiver and the
   `mfficiency_updates` channel. Builds must keep the same signing key (the
