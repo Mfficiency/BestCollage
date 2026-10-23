@@ -78,7 +78,8 @@ class AppUpdates {
 
   /// Builds the controller. Seams for tests: [store], [http] (the GitHub
   /// JSON requests), [downloader], [platform] (`UpdatePlatform(supported:
-  /// true)` to act like a phone), [clock].
+  /// true)` to act like a phone), [clock], [backupRoots] (the folders the
+  /// full backup reads, path_provider's otherwise).
   factory AppUpdates.create({
     SharedPreferences? prefs,
     UpdateStore? store,
@@ -86,6 +87,7 @@ class AppUpdates {
     ApkDownloader? downloader,
     UpdatePlatform? platform,
     DateTime Function()? clock,
+    Future<Map<String, String>> Function()? backupRoots,
     Duration firstCheckDelay = const Duration(seconds: 3),
   }) {
     final settings = AppSettings.instance;
@@ -101,6 +103,7 @@ class AppUpdates {
             build: AppVersion.buildNumber,
             prefs: prefs,
             platform: updatePlatform,
+            roots: backupRoots,
             clock: clock,
             log: (event, data) => LogService.add(
                 'backup', data.isEmpty ? event : '$event ${jsonEncode(data)}'),

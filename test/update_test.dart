@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:best_collage/best_collage.dart';
 import 'package:flutter/material.dart';
@@ -220,10 +221,17 @@ void main() {
     });
 
     test('a new install is noticed before anything writes prefs', () async {
+      // Since updates package 1.6.1 a new install has no files either.
+      final docs = Directory.systemTemp.createTempSync('collage_docs');
+      addTearDown(() => docs.deleteSync(recursive: true));
+      Future<Map<String, String>> roots() async => {'documents': docs.path};
+
       SharedPreferences.setMockInitialValues({});
       final fresh = await SharedPreferences.getInstance();
       final a = AppUpdates.create(
-          prefs: fresh, platform: UpdatePlatform(supported: true));
+          prefs: fresh,
+          platform: UpdatePlatform(supported: true),
+          backupRoots: roots);
       await a.backup!.init();
       expect(a.backup!.looksFresh, isTrue);
       a.controller.dispose();
@@ -231,10 +239,24 @@ void main() {
       SharedPreferences.setMockInitialValues({'intro_shown': true});
       final used = await SharedPreferences.getInstance();
       final b = AppUpdates.create(
-          prefs: used, platform: UpdatePlatform(supported: true));
+          prefs: used,
+          platform: UpdatePlatform(supported: true),
+          backupRoots: roots);
       await b.backup!.init();
       expect(b.backup!.looksFresh, isFalse);
       b.controller.dispose();
+
+      // Collages but no preferences: used too.
+      File('${docs.path}/collages.json').writeAsStringSync('[]');
+      SharedPreferences.setMockInitialValues({});
+      final filesOnly = await SharedPreferences.getInstance();
+      final c = AppUpdates.create(
+          prefs: filesOnly,
+          platform: UpdatePlatform(supported: true),
+          backupRoots: roots);
+      await c.backup!.init();
+      expect(c.backup!.looksFresh, isFalse);
+      c.controller.dispose();
     });
 
     test('no preferences (widget tests): no backup', () {

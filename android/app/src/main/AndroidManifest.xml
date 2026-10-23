@@ -1,12 +1,16 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Picking photos uses the system Photo Picker (Android 13+) or the
          document picker (older), neither of which needs a storage permission.
 
          Saving the collage goes through MediaStore (gal). That needs no
-         permission on Android 10+; Android 9 and older need write access. -->
+         permission on Android 10+; Android 9 and older need write access.
+         mfficiency_updates asks for it up to 28 (full backup); this wider
+         range wins (tools:replace), or the manifest merge fails. -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
+        android:maxSdkVersion="29"
+        tools:replace="android:maxSdkVersion" />
     <!-- In-app updates: check GitHub for a newer build and download it. The
          install permission (REQUEST_INSTALL_PACKAGES) and the install
          receiver come from the mfficiency_updates plugin's manifest. -->
