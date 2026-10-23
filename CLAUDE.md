@@ -134,8 +134,17 @@ APK).
   SharedPreferences store, date formats, log, and the update state of 0.4.5
   and older carried over once (`migrateLegacyState` → the package's
   `migrateLegacyUpdateState` with the app's own key parsing; it also deletes
-  the old `<external files>/updates`). No pre-install hook, no prompt gate
+  the old `<external files>/updates`). No pre-install hook yet, no prompt gate
   (updates only start after the intro).
+  Full backup: `AppUpdates.backup` is the package's `FullBackup`
+  (appName `BestCollage`, `keep: 4` — the photo copies make backups big;
+  `backup.init()` runs first in `AppUpdates.init`, before anything writes
+  prefs). It writes `Download/BestCollage/Backups/*.tar.gz` (kept on
+  uninstall) with the whole documents folder (`collages/` incl. draft,
+  history, thumbs, photo copies; `settings.json`; startup times), support
+  and external folders, and SharedPreferences. Settings › Data shows
+  `FullBackupTiles`; `CollageAppState` calls `offerRestore` once after the
+  first frame. Not yet wired as `beforeInstall`. Android only.
   Android: nothing in the app (`MainActivity` is a plain FlutterActivity);
   the plugin brings `REQUEST_INSTALL_PACKAGES`, its install receiver and the
   `mfficiency_updates` channel. Builds must keep the same signing key (the

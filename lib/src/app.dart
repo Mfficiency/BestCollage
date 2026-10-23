@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -48,7 +50,19 @@ class CollageAppState extends State<CollageApp> {
     super.initState();
     // Rebuild (and re-theme) whenever any setting changes.
     _settings.addListener(_onSettingsChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startUpdates());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _offerRestore();
+      _startUpdates();
+    });
+  }
+
+  /// On a new install (a reinstall too), asks once whether to restore a
+  /// full backup from Download/BestCollage/Backups (Android only).
+  void _offerRestore() {
+    final context = _navigatorKey.currentContext;
+    final backup = AppUpdates.instance.backup;
+    if (!mounted || context == null || backup == null) return;
+    unawaited(backup.offerRestore(context));
   }
 
   @override

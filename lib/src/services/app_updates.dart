@@ -13,6 +13,8 @@ import 'log_service.dart';
 
 export 'package:mfficiency_updates/mfficiency_updates.dart'
     show
+        FullBackup,
+        FullBackupTiles,
         ReleaseBuildInfo,
         UpdateBanner,
         UpdateCheckTileText,
@@ -36,9 +38,16 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 /// * links opened with url_launcher (the Windows desktop too);
 /// * the app's preferences, date formats and log;
 /// * the update state of 0.4.5 and older, carried over once
-///   ([migrateLegacyState]).
+///   ([migrateLegacyState]);
+/// * the package's [FullBackup] ([backup]): everything the app keeps
+///   (`<documents>/collages/` with the draft, history, thumbnails and the
+///   photo copies, `settings.json`, the startup times, the preferences) as
+///   one file in `Download/BestCollage/Backups/`, which stays when the app
+///   is uninstalled. "Back up everything" / "Restore from a backup" in
+///   Settings › Data, and a one-time restore offer on a new install.
+///   Not yet run before updates (no `beforeInstall`).
 class AppUpdates {
-  AppUpdates._(this.controller);
+  AppUpdates._(this.controller, this.backup);
 
   /// The app's updates. [init] sets it in `main`; until then (widget tests
   /// that build a page alone) an in-memory one that never checks by itself.
@@ -58,10 +67,20 @@ class AppUpdates {
 
   final UpdateController controller;
 
+  /// The full backup to Downloads; null when [create] got no preferences
+  /// (tests that only need the controller).
+  final FullBackup? backup;
+
+  /// Backups kept in `Download/BestCollage/Backups/` (newest first). The
+  /// photo copies make a backup about as big as the photos in the collages,
+  /// so fewer than the package's 10.
+  static const int keepBackups = 4;
+
   /// Builds the controller. Seams for tests: [store], [http] (the GitHub
   /// JSON requests), [downloader], [platform] (`UpdatePlatform(supported:
   /// true)` to act like a phone), [clock].
   factory AppUpdates.create({
+    SharedPreferences? prefs,
     UpdateStore? store,
     UpdateHttp? http,
     ApkDownloader? downloader,
@@ -70,6 +89,22 @@ class AppUpdates {
     Duration firstCheckDelay = const Duration(seconds: 3),
   }) {
     final settings = AppSettings.instance;
+    final updatePlatform = platform ?? UpdatePlatform(openUrl: _openUrl);
+    final backup = prefs == null
+        ? null
+        : FullBackup(
+            config: const FullBackupConfig(
+              appName: 'BestCollage',
+              keep: keepBackups,
+            ),
+            version: AppVersion.version,
+            build: AppVersion.buildNumber,
+            prefs: prefs,
+            platform: updatePlatform,
+            clock: clock,
+            log: (event, data) => LogService.add(
+                'backup', data.isEmpty ? event : '$event ${jsonEncode(data)}'),
+          );
     final controller = UpdateController(
       config: UpdateConfig(
         appName: 'BestCollage',
@@ -87,21 +122,24 @@ class AppUpdates {
       store: store ?? MemoryUpdateStore(),
       http: http,
       downloader: downloader,
-      platform: platform ?? UpdatePlatform(openUrl: _openUrl),
+      platform: updatePlatform,
       strings: (_) => strings,
       log: (level, event, data) => LogService.add(
           'update', data.isEmpty ? event : '$event ${jsonEncode(data)}'),
       clock: clock,
     );
-    return AppUpdates._(controller);
+    return AppUpdates._(controller, backup);
   }
 
-  /// In `main`, before the first frame (no network): carries over the old
-  /// update state, then reads the package's records.
+  /// In `main`, before the first frame (no network) and before the app
+  /// writes preferences: notes whether this is a new install (for the
+  /// restore offer), carries over the old update state, then reads the
+  /// package's records.
   static Future<AppUpdates> init(SharedPreferences prefs) async {
+    final updates = AppUpdates.create(
+        prefs: prefs, store: SharedPreferencesUpdateStore(prefs));
+    await updates.backup?.init();
     await migrateLegacyState(prefs);
-    final updates =
-        AppUpdates.create(store: SharedPreferencesUpdateStore(prefs));
     await updates.controller.init();
     instance = updates;
     return updates;

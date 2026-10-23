@@ -198,6 +198,52 @@ void main() {
     });
   });
 
+  group('full backup', () {
+    test('BestCollage, 4 kept, the controller\'s platform, everything in',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final platform = UpdatePlatform(supported: true);
+      final u = AppUpdates.create(prefs: prefs, platform: platform);
+      final b = u.backup!;
+      expect(b.config.appName, 'BestCollage');
+      expect(b.folder, 'Download/BestCollage/Backups');
+      expect(b.config.keep, AppUpdates.keepBackups);
+      expect(AppUpdates.keepBackups, 4);
+      expect(b.config.excluded, isEmpty,
+          reason: 'collages/ (thumbs, photo copies) is all data');
+      expect(b.config.excludedPrefixes, isEmpty);
+      expect(b.platform, same(platform));
+      expect(b.version, AppVersion.version);
+      expect(b.build, AppVersion.buildNumber);
+      u.controller.dispose();
+    });
+
+    test('a new install is noticed before anything writes prefs', () async {
+      SharedPreferences.setMockInitialValues({});
+      final fresh = await SharedPreferences.getInstance();
+      final a = AppUpdates.create(
+          prefs: fresh, platform: UpdatePlatform(supported: true));
+      await a.backup!.init();
+      expect(a.backup!.looksFresh, isTrue);
+      a.controller.dispose();
+
+      SharedPreferences.setMockInitialValues({'intro_shown': true});
+      final used = await SharedPreferences.getInstance();
+      final b = AppUpdates.create(
+          prefs: used, platform: UpdatePlatform(supported: true));
+      await b.backup!.init();
+      expect(b.backup!.looksFresh, isFalse);
+      b.controller.dispose();
+    });
+
+    test('no preferences (widget tests): no backup', () {
+      final u = AppUpdates.create();
+      expect(u.backup, isNull);
+      u.controller.dispose();
+    });
+  });
+
   group('the package\'s behaviour, configured', () {
     // Resume checks, the rate-limit pause, the switch, APK-less releases,
     // User-Agent and the channel order are the package's (tested there);

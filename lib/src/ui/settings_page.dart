@@ -66,6 +66,10 @@ class _SettingsPageState extends State<SettingsPage> {
     _SearchEntry('Export everything', 3, 'backup save json data settings'),
     _SearchEntry('Export settings', 3, 'backup save json'),
     _SearchEntry('Import', 3, 'restore backup load json'),
+    _SearchEntry('Back up everything', 3,
+        'backup full downloads photos collages reinstall uninstall'),
+    _SearchEntry('Restore from a backup', 3,
+        'restore backup full downloads reinstall'),
   ];
 
   @override
@@ -383,6 +387,11 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
+          // Everything (collages, photo copies, settings) as one file in
+          // Download/BestCollage/Backups, kept when the app is uninstalled.
+          // Android only (nothing elsewhere).
+          if (AppUpdates.instance.backup case final backup?)
+            FullBackupTiles(backup: backup),
         ],
       );
 
