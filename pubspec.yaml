@@ -7,7 +7,7 @@ name: best_collage
 description: BestCollage — put 1 to 4 photos together into one picture.
 publish_to: 'none'
 
-version: 0.4.14+22
+version: 0.4.15+23
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -23,6 +23,7 @@ dependencies:
   flutter_markdown: ^0.6.10   # Changelog rendering
   file_selector: ^1.0.0       # backup import / export file picking
   url_launcher: ^6.2.5        # update links off Android (AppUpdates)
+  flutter_secure_storage: ^9.2.4  # GitHub token for updates (AppUpdates)
   fl_chart: ^0.63.0           # startup-times chart
   image_picker: ^1.2.1
   exif: ^3.3.0

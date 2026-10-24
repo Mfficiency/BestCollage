@@ -99,7 +99,11 @@ APK).
   template's copy and run its `tool/sync_updates_package.sh <this folder>`;
   `test/updates_package_vendored_test.dart` fails on a hand edit; its
   README.md describes the flow). It reads the GitHub releases of
-  Mfficiency/BestCollage (public, no token; tag prefix `v`, every channel,
+  Mfficiency/BestCollage (public; an optional token from Settings ›
+  Updates › GitHub token lives in flutter_secure_storage (`AppUpdates.
+  tokenKey`, never prefs/logs/backups) and switches downloads to the asset
+  API, so it keeps updating if the repo turns private — `privateRepo` stays
+  false; tag prefix `v`, every channel,
   prereleases included, drafts not) and offers the highest build number
   above the installed versionCode (x.y.z doesn't matter). A newer build
   downloads **silently** into the cache (`.part`, resumed, reused after a

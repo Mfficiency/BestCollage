@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.15] - 2026-10-24
+- Settings › Updates › GitHub token (optional): the token now lives in the phone's secure storage instead of the preferences (a token saved in 0.4.14 moves over by itself), never in logs or backups. With a token the app downloads updates through GitHub's API, so it keeps updating if the repo turns private; without one nothing changes (the shared update module is now 1.6.3)
+
 ## [0.4.14] - 2026-10-24
 - Settings › Updates: a GitHub token field, ready for when the repo goes private (read-only access to BestCollage). It stays on this device and out of backups; not needed today.
 

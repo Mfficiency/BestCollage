@@ -182,12 +182,14 @@ void main() {
           reason: 'public repo, no token');
     });
 
-    test('a saved GitHub token goes with every request, out of backups',
+    test('a saved GitHub token goes with every request, from secure storage',
         () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
+      final tokens = MemoryUpdateTokenStore();
       final u = AppUpdates.create(
         prefs: prefs,
+        tokens: tokens,
         store: MemoryUpdateStore(),
         http: github.http,
         downloader: downloader,
@@ -198,10 +200,15 @@ void main() {
       await u.controller.init();
       AppUpdates.instance = u;
       expect(u.hasToken, isFalse);
-      expect(AppUpdates.privateRepo, isFalse);
+      expect(await u.readToken(), isNull);
+      expect(AppUpdates.privateRepo, isFalse,
+          reason: 'true without a token would stop updates');
 
       await u.setToken('  github_pat_abc  ');
-      expect(prefs.getString(AppUpdates.tokenKey), 'github_pat_abc');
+      expect(tokens.values[AppUpdates.tokenKey], 'github_pat_abc');
+      expect(await u.readToken(), 'github_pat_abc');
+      expect(prefs.getKeys(), isNot(contains(AppUpdates.tokenKey)),
+          reason: 'never in plain preferences');
       expect(u.hasToken, isTrue);
       expect(github.headers.last['Authorization'], 'Bearer github_pat_abc');
       expect(u.backup!.config.excludedPrefixes, {AppUpdates.tokenKey});
@@ -212,9 +219,47 @@ void main() {
 
       github.status = 200;
       await u.setToken(null);
-      expect(prefs.containsKey(AppUpdates.tokenKey), isFalse);
+      expect(tokens.values, isEmpty);
+      expect(await u.readToken(), isNull);
       expect(u.hasToken, isFalse);
       expect(github.headers.last.containsKey('Authorization'), isFalse);
+    });
+
+    test('a failing secure storage means no token, updates as before',
+        () async {
+      final u = AppUpdates.create(
+        tokens: _FailingTokens(),
+        store: MemoryUpdateStore(),
+        http: github.http,
+        downloader: downloader,
+        platform: UpdatePlatform(supported: false),
+        clock: () => now,
+        firstCheckDelay: Duration.zero,
+      );
+      await u.controller.init();
+      expect(await u.readToken(), isNull);
+      expect(u.hasToken, isFalse);
+      expect((await u.controller.check()).status, UpdateStatus.available);
+      expect(github.headers.last.containsKey('Authorization'), isFalse);
+      u.controller.dispose();
+    });
+
+    test("0.4.14's token in the preferences moves to secure storage",
+        () async {
+      SharedPreferences.setMockInitialValues(
+          {AppUpdates.tokenKey: 'github_pat_old', 'other': 1});
+      final prefs = await SharedPreferences.getInstance();
+      final tokens = MemoryUpdateTokenStore();
+      await AppUpdates.migratePrefsToken(prefs, tokens);
+      expect(tokens.values, {AppUpdates.tokenKey: 'github_pat_old'});
+      expect(prefs.containsKey(AppUpdates.tokenKey), isFalse);
+      expect(prefs.getInt('other'), 1);
+
+      // One saved in secure storage already wins.
+      await prefs.setString(AppUpdates.tokenKey, 'github_pat_older');
+      await AppUpdates.migratePrefsToken(prefs, tokens);
+      expect(tokens.values, {AppUpdates.tokenKey: 'github_pat_old'});
+      expect(prefs.containsKey(AppUpdates.tokenKey), isFalse);
     });
 
     test('other tag prefixes and drafts are not this app', () async {
@@ -818,4 +863,14 @@ void expectNothingPoppedUpIn(WidgetTester tester) {
   expect(find.byType(Dialog), findsNothing);
   expect(find.byType(AlertDialog), findsNothing);
   expect(find.byType(BottomSheet), findsNothing);
+}
+
+class _FailingTokens implements UpdateTokenStore {
+  @override
+  Future<String?> read(String key) => Future.error(StateError('no keystore'));
+  @override
+  Future<void> write(String key, String value) =>
+      Future.error(StateError('no keystore'));
+  @override
+  Future<void> delete(String key) => Future.error(StateError('no keystore'));
 }

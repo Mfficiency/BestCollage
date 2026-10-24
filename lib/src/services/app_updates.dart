@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mfficiency_updates/mfficiency_updates.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -33,9 +34,11 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 ///
 /// * the public repo Mfficiency/BestCollage, tags `v<x.y.z>-<build>[-dev|
 ///   -staging]` of every channel, a 15-minute poll;
-/// * an optional GitHub token (Settings › Updates › GitHub token, [tokenKey]):
-///   not needed while the repo is public, ready for when it isn't (then
-///   set [privateRepo]);
+/// * an optional GitHub token (Settings › Updates › GitHub token, [tokenKey])
+///   in secure storage ([UpdateTokenStore]): not needed while the repo is
+///   public; with one the package (1.6.3+) already downloads through the
+///   asset API, so the app keeps updating if the repo turns private.
+///   [privateRepo] stays false (true without a token stops updates);
 /// * the "Automatically check for updates" switch ([AppSettings]) as
 ///   [UpdateConfig.autoCheck] / [UpdateConfig.autoCheckChanges];
 /// * links opened with url_launcher (the Windows desktop too);
@@ -50,7 +53,7 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 ///   Settings › Data, a one-time restore offer on a new install, and one
 ///   before every update (`beforeInstall`).
 class AppUpdates {
-  AppUpdates._(this.controller, this.backup, this._prefs);
+  AppUpdates._(this.controller, this.backup, this._tokens);
 
   /// The app's updates. [init] sets it in `main`; until then (widget tests
   /// that build a page alone) an in-memory one that never checks by itself.
@@ -68,31 +71,48 @@ class AppUpdates {
   static const String repo = 'Mfficiency/BestCollage';
   static const Duration interval = Duration(minutes: 15);
 
-  /// True once the repo is private: checks then need the token and the APK
-  /// downloads through the asset API. Ship a build with the token set first.
+  /// Stays false: true makes checks require a token, so updates would stop
+  /// on a phone without one. A saved token already downloads through the
+  /// asset API (package 1.6.3), which keeps working once the repo is private.
   static const bool privateRepo = false;
 
   /// The GitHub token (fine-grained, this repo only, Contents: read-only)
-  /// in the app's preferences. Never in the full backup in Downloads
-  /// ([FullBackupConfig.excludedPrefixes]): paste it again after a restore.
+  /// under this key in secure storage ([UpdateTokenStore]); never in the
+  /// preferences, the log or the full backup in Downloads. 0.4.14 kept it in
+  /// the preferences: [init] moves it over once
+  /// ([FullBackupConfig.excludedPrefixes] still keeps that key out).
   static const String tokenKey = 'updates.github_token';
 
   final UpdateController controller;
-  final SharedPreferences? _prefs;
+  final UpdateTokenStore _tokens;
 
   /// A token is saved (and sent with every GitHub request).
   bool get hasToken => controller.hasToken;
 
-  /// Saves (or with null / empty removes) the token, then checks at once.
+  /// What the package's `tokenProvider` reads: the saved token, or null
+  /// (none, or secure storage failed: then updating works as without one).
+  Future<String?> readToken() async {
+    try {
+      final t = (await _tokens.read(tokenKey))?.trim();
+      return t == null || t.isEmpty ? null : t;
+    } catch (e) {
+      LogService.add('update', 'token.read failed ${e.runtimeType}');
+      return null;
+    }
+  }
+
+  /// Saves (or with null / empty removes) the token, then
+  /// [UpdateController.reloadToken] (which checks at once).
   Future<UpdateResult> setToken(String? token) async {
     final t = token?.trim() ?? '';
-    final prefs = _prefs;
-    if (prefs != null) {
+    try {
       if (t.isEmpty) {
-        await prefs.remove(tokenKey);
+        await _tokens.delete(tokenKey);
       } else {
-        await prefs.setString(tokenKey, t);
+        await _tokens.write(tokenKey, t);
       }
+    } catch (e) {
+      LogService.add('update', 'token.write failed ${e.runtimeType}');
     }
     return controller.reloadToken();
   }
@@ -109,9 +129,11 @@ class AppUpdates {
   /// Builds the controller. Seams for tests: [store], [http] (the GitHub
   /// JSON requests), [downloader], [platform] (`UpdatePlatform(supported:
   /// true)` to act like a phone), [clock], [backupRoots] (the folders the
-  /// full backup reads, path_provider's otherwise).
+  /// full backup reads, path_provider's otherwise), [tokens] (in memory
+  /// unless given; [init] passes secure storage).
   factory AppUpdates.create({
     SharedPreferences? prefs,
+    UpdateTokenStore? tokens,
     UpdateStore? store,
     UpdateHttp? http,
     ApkDownloader? downloader,
@@ -121,6 +143,8 @@ class AppUpdates {
     Duration firstCheckDelay = const Duration(seconds: 3),
   }) {
     final settings = AppSettings.instance;
+    final tokenStore = tokens ?? MemoryUpdateTokenStore();
+    late final AppUpdates updates;
     final updatePlatform = platform ?? UpdatePlatform(openUrl: _openUrl);
     final backup = prefs == null
         ? null
@@ -147,7 +171,7 @@ class AppUpdates {
         channel: AppVersion.channel,
         githubRepo: repo,
         privateRepo: privateRepo,
-        tokenProvider: () async => prefs?.getString(tokenKey),
+        tokenProvider: () => updates.readToken(),
         tagPrefix: 'v',
         autoCheck: () => settings.autoUpdateCheckEnabled,
         autoCheckChanges: settings,
@@ -165,18 +189,23 @@ class AppUpdates {
           'update', data.isEmpty ? event : '$event ${jsonEncode(data)}'),
       clock: clock,
     );
-    return AppUpdates._(controller, backup, prefs);
+    return updates = AppUpdates._(controller, backup, tokenStore);
   }
 
   /// In `main`, before the first frame (no network) and before the app
   /// writes preferences: notes whether this is a new install (for the
   /// restore offer), carries over the old update state, then reads the
   /// package's records.
-  static Future<AppUpdates> init(SharedPreferences prefs) async {
+  static Future<AppUpdates> init(SharedPreferences prefs,
+      {UpdateTokenStore? tokens}) async {
+    final tokenStore = tokens ?? SecureUpdateTokenStore();
     final updates = AppUpdates.create(
-        prefs: prefs, store: SharedPreferencesUpdateStore(prefs));
+        prefs: prefs,
+        tokens: tokenStore,
+        store: SharedPreferencesUpdateStore(prefs));
     await updates.backup?.init();
     await migrateLegacyState(prefs);
+    await migratePrefsToken(prefs, tokenStore);
     await updates.controller.init();
     instance = updates;
     return updates;
@@ -192,6 +221,23 @@ class AppUpdates {
   /// browser through url_launcher.
   static Future<bool> _openUrl(String url) =>
       launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+
+  /// 0.4.14 saved the token in the preferences: moves it into secure
+  /// storage (unless one is there already) and removes it from them.
+  @visibleForTesting
+  static Future<void> migratePrefsToken(
+      SharedPreferences prefs, UpdateTokenStore tokens) async {
+    final old = prefs.getString(tokenKey)?.trim();
+    if (old == null) return;
+    try {
+      if (old.isNotEmpty && (await tokens.read(tokenKey)) == null) {
+        await tokens.write(tokenKey, old);
+      }
+    } catch (e) {
+      LogService.add('update', 'token.migrate failed ${e.runtimeType}');
+    }
+    await prefs.remove(tokenKey);
+  }
 
   // ── State of 0.4.5 and older ───────────────────────────────────────────
 
@@ -252,4 +298,39 @@ class AppUpdates {
           : (version: version, build: build, at: downloadedAt),
     );
   }
+}
+
+/// Where [AppUpdates] keeps the GitHub token.
+abstract class UpdateTokenStore {
+  Future<String?> read(String key);
+  Future<void> write(String key, String value);
+  Future<void> delete(String key);
+}
+
+/// The device's secure storage (flutter_secure_storage: Android Keystore,
+/// Windows Credential Manager), outside the preferences and their backups.
+class SecureUpdateTokenStore implements UpdateTokenStore {
+  SecureUpdateTokenStore([FlutterSecureStorage? storage])
+      : _storage = storage ?? const FlutterSecureStorage();
+  final FlutterSecureStorage _storage;
+
+  @override
+  Future<String?> read(String key) => _storage.read(key: key);
+  @override
+  Future<void> write(String key, String value) =>
+      _storage.write(key: key, value: value);
+  @override
+  Future<void> delete(String key) => _storage.delete(key: key);
+}
+
+/// In memory (tests, and the instance before [AppUpdates.init]).
+class MemoryUpdateTokenStore implements UpdateTokenStore {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> read(String key) async => values[key];
+  @override
+  Future<void> write(String key, String value) async => values[key] = value;
+  @override
+  Future<void> delete(String key) async => values.remove(key);
 }

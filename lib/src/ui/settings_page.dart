@@ -63,7 +63,8 @@ class _SettingsPageState extends State<SettingsPage> {
         'update upgrade new version install apk download latest'),
     _SearchEntry('Automatically check for updates', 2,
         'update upgrade new version install apk download'),
-    _SearchEntry('GitHub token', 2, 'token key private pat github access'),
+    _SearchEntry('GitHub token (optional)', 2,
+        'token key private pat github access'),
     _SearchEntry('Export everything', 3, 'backup save json data settings'),
     _SearchEntry('Export settings', 3, 'backup save json'),
     _SearchEntry('Import', 3, 'restore backup load json'),
@@ -352,10 +353,11 @@ class _SettingsPageState extends State<SettingsPage> {
           listenable: controller,
           builder: (context, _) => ListTile(
             key: const Key('settings.update.token'),
-            title: const Text('GitHub token'),
+            title: const Text('GitHub token (optional)'),
             subtitle: Text(AppUpdates.instance.hasToken
-                ? 'Saved. Sent with every update check.'
-                : 'Not needed while ${AppUpdates.repo} is public.'),
+                ? 'Saved: ••••••••. Only needed if this app’s repo is '
+                    'private.'
+                : 'Only needed if this app’s repo is private.'),
             onTap: () => showDialog<void>(
               context: context,
               builder: (_) => const _TokenDialog(),
@@ -595,15 +597,16 @@ class _TokenDialogState extends State<_TokenDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('GitHub token'),
+        title: const Text('GitHub token (optional)'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
                 'Fine-grained token with read-only Contents access to '
-                '${AppUpdates.repo}. Only needed once the repo is private; '
-                'it stays on this device and out of backups.'),
+                '${AppUpdates.repo}. Only needed if the repo is private; '
+                'it stays in this device’s secure storage, out of '
+                'backups and logs.'),
             const SizedBox(height: AppSpacing.md),
             TextField(
               key: const Key('settings.update.token.field'),
