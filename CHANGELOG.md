@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.16] - 2026-10-24
+- Settings: same layout as the other apps — Appearance first, Updates and Backup & data at the bottom, less space between sections; every section folds (Collapse all / Expand all)
+
 ## [0.4.15] - 2026-10-24
 - Settings › Updates › GitHub token (optional): the token now lives in the phone's secure storage instead of the preferences (a token saved in 0.4.14 moves over by itself), never in logs or backups. With a token the app downloads updates through GitHub's API, so it keeps updating if the repo turns private; without one nothing changes (the shared update module is now 1.6.3)
 

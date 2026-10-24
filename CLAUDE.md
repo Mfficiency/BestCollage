@@ -146,7 +146,7 @@ APK).
   prefs). It writes `Download/BestCollage/Backups/*.tar.gz` (kept on
   uninstall) with the whole documents folder (`collages/` incl. draft,
   history, thumbs, photo copies; `settings.json`; startup times), support
-  and external folders, and SharedPreferences. Settings › Data shows
+  and external folders, and SharedPreferences. Settings › Backup & data shows
   `FullBackupTiles`; `CollageAppState` calls `offerRestore` once after the
   first frame, and before every update (`beforeInstall`). Android only.
   Android: nothing in the app (`MainActivity` is a plain FlutterActivity);
