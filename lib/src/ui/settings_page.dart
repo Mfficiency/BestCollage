@@ -34,7 +34,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _tabsHeaderKey = GlobalKey();
-  Set<String> get _collapsed => _s.collapsedSettingsSections;
+  // Every visit starts with all sections collapsed (the same in every
+  // Mfficiency app); a header, chip or search result opens one.
+  final Set<String> _collapsed = {..._sectionTitles};
   final List<GlobalKey> _sectionKeys = List<GlobalKey>.generate(
     _sectionTitles.length,
     (_) => GlobalKey(),
@@ -126,9 +128,14 @@ class _SettingsPageState extends State<SettingsPage> {
   // --- Scroll / section tracking (Vesta's mechanism) ----------------------
 
   Future<void> _jumpToSection(int index) async {
-    setState(() => _activeSectionIndex = index);
+    // A chip opens its section too: they all start collapsed.
+    setState(() {
+      _activeSectionIndex = index;
+      _collapsed.remove(_sectionTitles[index]);
+    });
+    await WidgetsBinding.instance.endOfFrame;
     final ctx = _sectionKeys[index].currentContext;
-    if (ctx == null) return;
+    if (ctx == null || !ctx.mounted) return;
     await Scrollable.ensureVisible(
       ctx,
       duration: const Duration(milliseconds: 280),

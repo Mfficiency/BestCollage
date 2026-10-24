@@ -73,11 +73,6 @@ class AppSettings extends ChangeNotifier {
   /// and install a newer build from any channel (Android only).
   bool autoUpdateCheckEnabled = true;
 
-  // --- Settings page --------------------------------------------------------
-  /// Titles of the Settings sections folded shut. Kept for the session only
-  /// (not saved, not in backups); every section starts open.
-  final Set<String> collapsedSettingsSections = {};
-
   // --- Notifications --------------------------------------------------------
   bool notificationsEnabled = false;
   int notificationDelaySeconds = AppConfig.defaultNotificationDelaySeconds;
@@ -209,6 +204,5 @@ class AppSettings extends ChangeNotifier {
     dateStampByDefault = false;
     saveMillis = {};
     autoUpdateCheckEnabled = true;
-    collapsedSettingsSections.clear();
   }
 }

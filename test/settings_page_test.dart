@@ -12,6 +12,8 @@ void main() {
   testWidgets('renders section chips and settings controls', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand Appearance'));
+    await tester.pumpAndSettle();
 
     // Section chips.
     for (final title in const [
@@ -22,7 +24,7 @@ void main() {
     ]) {
       expect(find.text(title), findsWidgets, reason: title);
     }
-    // A few representative controls from the first (visible) section.
+    // A few representative controls from the first section.
     expect(find.text('Minimalist mode'), findsOneWidget);
     expect(find.text('24-hour time'), findsOneWidget);
     expect(find.text('Date format'), findsOneWidget);
@@ -37,6 +39,8 @@ void main() {
   testWidgets('toggling minimalist updates settings', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand Appearance'));
+    await tester.pumpAndSettle();
 
     expect(AppSettings.instance.minimalist, isFalse);
     await tester.tap(find.widgetWithText(SwitchListTile, 'Minimalist mode'));
@@ -47,6 +51,8 @@ void main() {
   testWidgets('selecting the dark theme segment updates settings',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand Appearance'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Dark'));
@@ -81,46 +87,53 @@ void main() {
     expect(chips, ['Appearance', 'Collage', 'Updates', 'Backup & data']);
 
     // The cards are in the same order as the chips.
-    await tester.tap(find.text('Collapse all'));
-    await tester.pumpAndSettle();
     final cardTops = [
       for (final t in chips) tester.getTopLeft(find.byTooltip('Expand $t')).dy,
     ];
     expect(cardTops, orderedEquals([...cardTops]..sort()));
   });
 
-  testWidgets('section cards fold one by one and all at once', (tester) async {
+  testWidgets('sections start collapsed and open one by one or all at once',
+      (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
 
-    // Folding Appearance hides its rows, the others stay open.
-    expect(find.text('Minimalist mode'), findsOneWidget);
-    await tester.tap(find.byTooltip('Collapse Appearance'));
-    await tester.pumpAndSettle();
-    expect(find.text('Minimalist mode'), findsNothing);
-    expect(find.text('Export size'), findsOneWidget);
-    await tester.tap(find.byTooltip('Expand Appearance'));
-    await tester.pumpAndSettle();
-    expect(find.text('Minimalist mode'), findsOneWidget);
-
-    await tester.tap(find.text('Collapse all'));
-    await tester.pumpAndSettle();
     expect(find.text('Minimalist mode'), findsNothing);
     expect(find.text('Export size'), findsNothing);
     expect(find.text('Expand all'), findsOneWidget);
 
+    // Opening Appearance shows its rows, the others stay collapsed.
+    await tester.tap(find.byTooltip('Expand Appearance'));
+    await tester.pumpAndSettle();
+    expect(find.text('Minimalist mode'), findsOneWidget);
+    expect(find.text('Export size'), findsNothing);
+    await tester.tap(find.byTooltip('Collapse Appearance'));
+    await tester.pumpAndSettle();
+    expect(find.text('Minimalist mode'), findsNothing);
+
     await tester.tap(find.text('Expand all'));
     await tester.pumpAndSettle();
     expect(find.text('Minimalist mode'), findsOneWidget);
+    expect(find.text('Export size'), findsOneWidget);
     expect(find.text('Collapse all'), findsOneWidget);
+
+    await tester.tap(find.text('Collapse all'));
+    await tester.pumpAndSettle();
+    expect(find.text('Minimalist mode'), findsNothing);
+
+    // Opening Settings again starts collapsed again.
+    await tester.tap(find.byTooltip('Expand Appearance'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const MaterialApp(
+        home: SettingsPage(key: ValueKey('reopened'))));
+    await tester.pumpAndSettle();
+    expect(find.text('Minimalist mode'), findsNothing);
   });
 
   testWidgets('a search result opens its folded section', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Collapse all'));
-    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Search settings'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'automatic');

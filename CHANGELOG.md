@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.17] - 2026-10-24
+- Settings: every section starts collapsed each time you open it; tap a section, its chip or a search result to open it
+
 ## [0.4.16] - 2026-10-24
 - Settings: same layout as the other apps — Appearance first, Updates and Backup & data at the bottom, less space between sections; every section folds (Collapse all / Expand all)
 
