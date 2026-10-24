@@ -32,7 +32,10 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 /// builds); this only holds the app's config:
 ///
 /// * the public repo Mfficiency/BestCollage, tags `v<x.y.z>-<build>[-dev|
-///   -staging]` of every channel, no token, a 15-minute poll;
+///   -staging]` of every channel, a 15-minute poll;
+/// * an optional GitHub token (Settings › Updates › GitHub token, [tokenKey]):
+///   not needed while the repo is public, ready for when it isn't (then
+///   set [privateRepo]);
 /// * the "Automatically check for updates" switch ([AppSettings]) as
 ///   [UpdateConfig.autoCheck] / [UpdateConfig.autoCheckChanges];
 /// * links opened with url_launcher (the Windows desktop too);
@@ -47,7 +50,7 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 ///   Settings › Data, a one-time restore offer on a new install, and one
 ///   before every update (`beforeInstall`).
 class AppUpdates {
-  AppUpdates._(this.controller, this.backup);
+  AppUpdates._(this.controller, this.backup, this._prefs);
 
   /// The app's updates. [init] sets it in `main`; until then (widget tests
   /// that build a page alone) an in-memory one that never checks by itself.
@@ -65,7 +68,34 @@ class AppUpdates {
   static const String repo = 'Mfficiency/BestCollage';
   static const Duration interval = Duration(minutes: 15);
 
+  /// True once the repo is private: checks then need the token and the APK
+  /// downloads through the asset API. Ship a build with the token set first.
+  static const bool privateRepo = false;
+
+  /// The GitHub token (fine-grained, this repo only, Contents: read-only)
+  /// in the app's preferences. Never in the full backup in Downloads
+  /// ([FullBackupConfig.excludedPrefixes]): paste it again after a restore.
+  static const String tokenKey = 'updates.github_token';
+
   final UpdateController controller;
+  final SharedPreferences? _prefs;
+
+  /// A token is saved (and sent with every GitHub request).
+  bool get hasToken => controller.hasToken;
+
+  /// Saves (or with null / empty removes) the token, then checks at once.
+  Future<UpdateResult> setToken(String? token) async {
+    final t = token?.trim() ?? '';
+    final prefs = _prefs;
+    if (prefs != null) {
+      if (t.isEmpty) {
+        await prefs.remove(tokenKey);
+      } else {
+        await prefs.setString(tokenKey, t);
+      }
+    }
+    return controller.reloadToken();
+  }
 
   /// The full backup to Downloads; null when [create] got no preferences
   /// (tests that only need the controller).
@@ -98,6 +128,7 @@ class AppUpdates {
             config: const FullBackupConfig(
               appName: 'BestCollage',
               keep: keepBackups,
+              excludedPrefixes: {tokenKey},
             ),
             version: AppVersion.version,
             build: AppVersion.buildNumber,
@@ -115,6 +146,8 @@ class AppUpdates {
         build: AppVersion.buildNumber,
         channel: AppVersion.channel,
         githubRepo: repo,
+        privateRepo: privateRepo,
+        tokenProvider: () async => prefs?.getString(tokenKey),
         tagPrefix: 'v',
         autoCheck: () => settings.autoUpdateCheckEnabled,
         autoCheckChanges: settings,
@@ -132,7 +165,7 @@ class AppUpdates {
           'update', data.isEmpty ? event : '$event ${jsonEncode(data)}'),
       clock: clock,
     );
-    return AppUpdates._(controller, backup);
+    return AppUpdates._(controller, backup, prefs);
   }
 
   /// In `main`, before the first frame (no network) and before the app

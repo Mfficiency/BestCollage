@@ -63,6 +63,7 @@ class _SettingsPageState extends State<SettingsPage> {
         'update upgrade new version install apk download latest'),
     _SearchEntry('Automatically check for updates', 2,
         'update upgrade new version install apk download'),
+    _SearchEntry('GitHub token', 2, 'token key private pat github access'),
     _SearchEntry('Export everything', 3, 'backup save json data settings'),
     _SearchEntry('Export settings', 3, 'backup save json'),
     _SearchEntry('Import', 3, 'restore backup load json'),
@@ -347,6 +348,20 @@ class _SettingsPageState extends State<SettingsPage> {
           value: _s.autoUpdateCheckEnabled,
           onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
         ),
+        ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => ListTile(
+            key: const Key('settings.update.token'),
+            title: const Text('GitHub token'),
+            subtitle: Text(AppUpdates.instance.hasToken
+                ? 'Saved. Sent with every update check.'
+                : 'Not needed while ${AppUpdates.repo} is public.'),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => const _TokenDialog(),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -537,4 +552,91 @@ class _TabsHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _TabsHeaderDelegate old) =>
       old.height != height || old.child != child;
+}
+
+/// Pastes, replaces or removes the GitHub token ([AppUpdates.setToken]),
+/// then says what GitHub made of it.
+class _TokenDialog extends StatefulWidget {
+  const _TokenDialog();
+
+  @override
+  State<_TokenDialog> createState() => _TokenDialogState();
+}
+
+class _TokenDialogState extends State<_TokenDialog> {
+  final TextEditingController _field = TextEditingController();
+  bool _busy = false;
+  String? _message;
+
+  @override
+  void dispose() {
+    _field.dispose();
+    super.dispose();
+  }
+
+  Future<void> _set(String? token) async {
+    if (token != null && token.trim().isEmpty) return;
+    setState(() => _busy = true);
+    final r = await AppUpdates.instance.setToken(token);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _message = switch (r.status) {
+        _ when token == null => 'Removed.',
+        UpdateStatus.badToken =>
+          'GitHub refused this token: wrong, expired or no access to '
+              '${AppUpdates.repo}.',
+        UpdateStatus.failed || UpdateStatus.rateLimited =>
+          'Saved, but GitHub could not be reached to check it.',
+        _ => 'Saved. GitHub accepted it.',
+      };
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('GitHub token'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Fine-grained token with read-only Contents access to '
+                '${AppUpdates.repo}. Only needed once the repo is private; '
+                'it stays on this device and out of backups.'),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              key: const Key('settings.update.token.field'),
+              controller: _field,
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: const InputDecoration(
+                labelText: 'Token',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (_message case final m?) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(m, key: const Key('settings.update.token.message')),
+            ],
+          ],
+        ),
+        actions: [
+          if (AppUpdates.instance.hasToken)
+            TextButton(
+              onPressed: _busy ? null : () => _set(null),
+              child: const Text('Remove'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            key: const Key('settings.update.token.save'),
+            onPressed: _busy ? null : () => _set(_field.text),
+            child: const Text('Save'),
+          ),
+        ],
+      );
 }

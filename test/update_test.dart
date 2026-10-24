@@ -182,6 +182,41 @@ void main() {
           reason: 'public repo, no token');
     });
 
+    test('a saved GitHub token goes with every request, out of backups',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final u = AppUpdates.create(
+        prefs: prefs,
+        store: MemoryUpdateStore(),
+        http: github.http,
+        downloader: downloader,
+        platform: UpdatePlatform(supported: false),
+        clock: () => now,
+        firstCheckDelay: Duration.zero,
+      );
+      await u.controller.init();
+      AppUpdates.instance = u;
+      expect(u.hasToken, isFalse);
+      expect(AppUpdates.privateRepo, isFalse);
+
+      await u.setToken('  github_pat_abc  ');
+      expect(prefs.getString(AppUpdates.tokenKey), 'github_pat_abc');
+      expect(u.hasToken, isTrue);
+      expect(github.headers.last['Authorization'], 'Bearer github_pat_abc');
+      expect(u.backup!.config.excludedPrefixes, {AppUpdates.tokenKey});
+
+      github.status = 401;
+      expect((await u.setToken('github_pat_wrong')).status,
+          UpdateStatus.badToken);
+
+      github.status = 200;
+      await u.setToken(null);
+      expect(prefs.containsKey(AppUpdates.tokenKey), isFalse);
+      expect(u.hasToken, isFalse);
+      expect(github.headers.last.containsKey('Authorization'), isFalse);
+    });
+
     test('other tag prefixes and drafts are not this app', () async {
       github.body = [
         release('9.0.0+99', prefix: 'music-v'),
@@ -213,7 +248,8 @@ void main() {
       expect(AppUpdates.keepBackups, 4);
       expect(b.config.excluded, isEmpty,
           reason: 'collages/ (thumbs, photo copies) is all data');
-      expect(b.config.excludedPrefixes, isEmpty);
+      expect(b.config.excludedPrefixes, {AppUpdates.tokenKey},
+          reason: 'the GitHub token stays out of Downloads');
       expect(b.platform, same(platform));
       expect(b.version, AppVersion.version);
       expect(b.build, AppVersion.buildNumber);

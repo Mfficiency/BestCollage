@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.14] - 2026-10-24
+- Settings › Updates: a GitHub token field, ready for when the repo goes private (read-only access to BestCollage). It stays on this device and out of backups; not needed today.
+
 ## [0.4.13] - 2026-10-23
 - Settings › Data: Back up everything saves all your collages (the draft, Previous collages and the photos in them), settings and startup times as one file in Download/BestCollage/Backups, which stays even if the app is uninstalled (the newest 4 are kept), and one is made automatically before every update. Restore from a backup brings it all back; a new install offers that once. Android only (the shared update module is now 1.6.0)
 
