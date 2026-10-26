@@ -73,6 +73,12 @@ class _SliderRow extends StatelessWidget {
   final double max;
   final String Function(double) display;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeStart;
+  final ValueChanged<double>? onChangeEnd;
+
+  /// Shown before the label (the border diagrams).
+  final Widget? leading;
+  final double labelWidth;
 
   const _SliderRow({
     required this.label,
@@ -81,13 +87,18 @@ class _SliderRow extends StatelessWidget {
     required this.max,
     required this.display,
     required this.onChanged,
+    this.onChangeStart,
+    this.onChangeEnd,
+    this.leading,
+    this.labelWidth = 84,
   });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        SizedBox(width: 84, child: Text(label)),
+        if (leading != null) ...[leading!, const SizedBox(width: 8)],
+        SizedBox(width: labelWidth, child: Text(label)),
         Expanded(
           child: Slider(
             value: value.clamp(min, max),
@@ -95,6 +106,8 @@ class _SliderRow extends StatelessWidget {
             max: max,
             label: display(value),
             onChanged: onChanged,
+            onChangeStart: onChangeStart,
+            onChangeEnd: onChangeEnd,
           ),
         ),
         SizedBox(
@@ -306,18 +319,15 @@ class _LayoutPanel extends StatelessWidget {
             ],
           ),
         ),
-        const _Label('Border'),
-        _SliderRow(
-          label: 'Width',
-          value: c.border,
-          min: 0,
-          max: 24,
-          display: (v) => v.round().toString(),
-          onChanged: (v) {
-            c.border = v;
-            c.changed();
-          },
-        ),
+        const _Label('Border width'),
+        _borderSlider(BorderPart.between, 'Between photos', c.border,
+            CollageController.maxBorder, (v) => c.border = v),
+        _borderSlider(BorderPart.sides, 'Left & right', c.sideBorder,
+            CollageController.maxOuterBorder, (v) => c.sideBorder = v),
+        _borderSlider(BorderPart.topBottom, 'Top & bottom',
+            c.topBottomBorder, CollageController.maxOuterBorder,
+            (v) => c.topBottomBorder = v),
+        const _Label('Corners & colour'),
         _SliderRow(
           label: 'Corners',
           value: c.cornerRadius,
@@ -344,6 +354,78 @@ class _LayoutPanel extends StatelessWidget {
       ],
     );
   }
+
+  /// One border width: a diagram of which lines it is, and while the slider
+  /// is dragged those lines light up on the collage too.
+  Widget _borderSlider(BorderPart part, String label, double value,
+      double max, ValueChanged<double> set) {
+    return _SliderRow(
+      leading: BorderDiagram(part: part),
+      label: label,
+      labelWidth: 104,
+      value: value,
+      min: 0,
+      max: max,
+      display: (v) => v.round().toString(),
+      onChangeStart: (_) => c.highlightBorder(part),
+      onChangeEnd: (_) => c.highlightBorder(null),
+      onChanged: (v) {
+        set(v);
+        c.changed();
+      },
+    );
+  }
+}
+
+/// A small collage frame with the lines [part] stands for drawn bold in the
+/// accent colour and the others faint.
+class BorderDiagram extends StatelessWidget {
+  final BorderPart part;
+  const BorderDiagram({super.key, required this.part});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CustomPaint(
+      size: const Size(24, 24),
+      painter: _BorderDiagramPainter(
+          part, scheme.primary, scheme.outlineVariant),
+    );
+  }
+}
+
+class _BorderDiagramPainter extends CustomPainter {
+  final BorderPart part;
+  final Color on;
+  final Color off;
+  _BorderDiagramPainter(this.part, this.on, this.off);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = (Offset.zero & size).deflate(2);
+    void line(Offset a, Offset b, bool lit) => canvas.drawLine(
+        a,
+        b,
+        Paint()
+          ..color = lit ? on : off
+          ..strokeWidth = lit ? 3.5 : 1.5
+          ..strokeCap = StrokeCap.round);
+    final between = part == BorderPart.between;
+    final sides = part == BorderPart.sides;
+    final topBottom = part == BorderPart.topBottom;
+    line(Offset(r.center.dx, r.top + 3), Offset(r.center.dx, r.bottom - 3),
+        between);
+    line(Offset(r.left + 3, r.center.dy), Offset(r.right - 3, r.center.dy),
+        between);
+    line(r.topLeft, r.bottomLeft, sides);
+    line(r.topRight, r.bottomRight, sides);
+    line(r.topLeft, r.topRight, topBottom);
+    line(r.bottomLeft, r.bottomRight, topBottom);
+  }
+
+  @override
+  bool shouldRepaint(_BorderDiagramPainter old) =>
+      old.part != part || old.on != on || old.off != off;
 }
 
 /// A tiny picture of a layout tree — the layout picker's icons.

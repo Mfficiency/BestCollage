@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.5.0] - 2026-10-26
+- Undo and Redo buttons under the collage. Zoom the view (magnifier button): pinch, scroll or drag to look closely at the whole collage without changing it — the close-up stays while you edit, and Fit to screen goes back. Borders: the left & right edges and the top & bottom edges each have their own width, apart from the width between photos; each slider shows a little diagram of its lines, and while you drag it those borders light up on the collage
+
 ## [0.4.11] - 2026-10-15
 - Changelog: every version shows when it was built, how long the build took and the size of its APK, taken from its GitHub release (the shared update module is now 1.5.0)
 

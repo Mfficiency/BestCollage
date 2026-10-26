@@ -197,7 +197,11 @@ class PhotoItem {
   /// Restores the edits saved by [toJson] onto a freshly loaded photo.
   void applyJson(Map data) {
     final taken = data['takenAt'];
-    if (taken is String) takenAt = DateTime.tryParse(taken) ?? takenAt;
+    if (taken is String) {
+      takenAt = DateTime.tryParse(taken) ?? takenAt;
+    } else if (data.containsKey('takenAt')) {
+      takenAt = null; // undo back to before a date was set by hand
+    }
     dateSource = DateSource.values
             .where((s) => s.name == data['dateSource'])
             .firstOrNull ??

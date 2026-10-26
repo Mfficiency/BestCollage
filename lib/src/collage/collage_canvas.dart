@@ -39,15 +39,34 @@ class CollageCanvas extends StatelessWidget {
           key: boundaryKey,
           child: LayoutBuilder(builder: (context, box) {
             final shortSide = box.biggest.shortestSide;
-            return Container(
-              color: c.borderColor,
-              padding: EdgeInsets.all(c.border),
-              child: _NodeView(
-                node: c.layout,
-                c: c,
-                shortSide: shortSide,
-                onAddPhoto: onAddPhoto,
-              ),
+            final highlight = c.exporting ? null : c.highlightedBorder;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: c.borderColor,
+                  padding: EdgeInsets.symmetric(
+                      horizontal: c.sideBorder, vertical: c.topBottomBorder),
+                  child: _NodeView(
+                    node: c.layout,
+                    c: c,
+                    shortSide: shortSide,
+                    onAddPhoto: onAddPhoto,
+                  ),
+                ),
+                if (highlight == BorderPart.sides) ...[
+                  _BorderHighlight(
+                      left: 0, top: 0, bottom: 0, width: c.sideBorder),
+                  _BorderHighlight(
+                      right: 0, top: 0, bottom: 0, width: c.sideBorder),
+                ],
+                if (highlight == BorderPart.topBottom) ...[
+                  _BorderHighlight(
+                      top: 0, left: 0, right: 0, height: c.topBottomBorder),
+                  _BorderHighlight(
+                      bottom: 0, left: 0, right: 0, height: c.topBottomBorder),
+                ],
+              ],
             );
           }),
         ),
@@ -133,6 +152,13 @@ class _SplitView extends StatelessWidget {
             height: horizontal ? box.maxHeight : secondLen,
             child: child(node.second),
           ),
+          if (!c.exporting && c.highlightedBorder == BorderPart.between)
+            _BorderHighlight(
+              left: horizontal ? firstLen : 0,
+              top: horizontal ? 0 : firstLen,
+              width: horizontal ? gap : box.maxWidth,
+              height: horizontal ? box.maxHeight : gap,
+            ),
           if (!c.exporting)
             Positioned(
               left: horizontal ? center - hit / 2 : 0,
@@ -152,6 +178,40 @@ class _SplitView extends StatelessWidget {
         ],
       );
     });
+  }
+}
+
+/// Tints the border whose width slider is being dragged, so it's clear which
+/// one changes (at least a hairline when the width is 0). Never saved.
+class _BorderHighlight extends StatelessWidget {
+  final double? left, top, right, bottom, width, height;
+
+  const _BorderHighlight({
+    this.left,
+    this.top,
+    this.right,
+    this.bottom,
+    this.width,
+    this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned(
+      left: left,
+      top: top,
+      right: right,
+      bottom: bottom,
+      width: width == null ? null : math.max(width!, 2),
+      height: height == null ? null : math.max(height!, 2),
+      child: IgnorePointer(
+        child: ColoredBox(
+          key: const Key('border-highlight'),
+          color: scheme.primary.withValues(alpha: 0.6),
+        ),
+      ),
+    );
   }
 }
 

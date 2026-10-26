@@ -57,7 +57,14 @@ APK).
 - `lib/src/collage/collage_models.dart` — `PhotoItem` (crop = zoom + alignment,
   quarterTurns, flip, own `Adjustments`, date stamp placement), layout tree
   (`SplitNode`/`LeafNode`; a split's `ratio` is a draggable divider).
-- `collage_controller.dart` — all editor state (`ChangeNotifier`).
+- `collage_controller.dart` — all editor state (`ChangeNotifier`). Borders:
+  `border` (between photos), `sideBorder`, `topBottomBorder` (older saves
+  have only `border`; it fills the other two); `highlightedBorder` tints the
+  one whose slider is being dragged. Undo/redo: snapshots of `toJson()` (no
+  selection/historyId) plus the `PhotoItem` objects; the page calls
+  `checkpoint()` on its 400 ms draft debounce, so a drag is one step; an
+  empty collage is never a step; `restore`/`clear` reset the steps; prune
+  keeps `photoPathsInUse`.
 - `collage_canvas.dart` — renders the tree; what's on screen is what's saved
   (`exporting` hides selection outline, divider handles, placeholders).
 - `color_matrix.dart` — one combined 5x4 matrix per photo (collage set, then
@@ -81,6 +88,11 @@ APK).
   from the last render time at that size (`AppSettings.saveMillis`, scaled
   by pixels for another size; `typicalSave`), or goes by the steps the first
   time. `CollagePage(clock:)` lets tests fake the time.
+- Zoom view in `collage_page.dart`: the magnifier button switches the
+  canvas into an `InteractiveViewer` (the collage under `IgnorePointer`);
+  turned off, the same `TransformationController` stays applied as a
+  `Transform` so a close-up can be edited; Fit to screen resets it. It sits
+  outside the `RepaintBoundary`, so saving is unaffected.
 - `collage_history_page.dart` — the "Previous collages" grid; returns the
   tapped entry to `CollagePage`, which reopens it.
 - In-app updates: the shared package `packages/mfficiency_updates`

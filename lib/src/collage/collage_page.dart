@@ -74,6 +74,12 @@ class _CollagePageState extends State<CollagePage> {
   CollageTool _tool = CollageTool.layout;
   bool _saving = false;
 
+  /// True while pinch / scroll / drag zoom and pan the view of the collage
+  /// instead of editing it. The zoom stays when this is turned off, so a
+  /// close-up can be edited; [_view] holds it.
+  bool _zoomingView = false;
+  final TransformationController _view = TransformationController();
+
   /// True until the last session's collage has been loaded back.
   bool _restoring = true;
   List<CollageHistoryEntry> _history = const [];
@@ -106,6 +112,7 @@ class _CollagePageState extends State<CollagePage> {
     _flushDraft();
     _lifecycle.dispose();
     c.removeListener(_onChanged);
+    _view.dispose();
     if (widget.controller == null) c.dispose();
     super.dispose();
   }
@@ -122,7 +129,7 @@ class _CollagePageState extends State<CollagePage> {
     if (!mounted) return;
     setState(() => _restoring = false);
     await _refreshHistory();
-    await _store.prune(inUse: c.photos.map((p) => p.path));
+    await _store.prune(inUse: c.photoPathsInUse);
   }
 
   Future<void> _refreshHistory() async {
@@ -157,12 +164,19 @@ class _CollagePageState extends State<CollagePage> {
   }
 
   /// Saves the collage being edited right away (also when the app goes to
-  /// the background, so a restart never loses it).
+  /// the background, so a restart never loses it). Edits pausing is also
+  /// what makes an undo step.
   void _flushDraft() {
     _draftTimer?.cancel();
     _draftTimer = null;
     if (_restoring) return;
+    c.checkpoint();
     _store.saveDraft(c.toJson());
+  }
+
+  void _resetView() {
+    _view.value = Matrix4.identity();
+    setState(() => _zoomingView = false);
   }
 
   /// Loads a saved state into the editor, reloading its photos from disk.
@@ -188,7 +202,7 @@ class _CollagePageState extends State<CollagePage> {
     );
     await _refreshHistory();
     if (entry != null) await _openEntry(entry);
-    await _store.prune(inUse: c.photos.map((p) => p.path));
+    await _store.prune(inUse: c.photoPathsInUse);
   }
 
   Future<void> _openEntry(CollageHistoryEntry entry) async {
@@ -213,7 +227,10 @@ class _CollagePageState extends State<CollagePage> {
       if (ok != true || !mounted) return;
     }
     await _restoreState(entry.state);
-    if (mounted) setState(() => _tool = CollageTool.layout);
+    if (mounted) {
+      _resetView();
+      setState(() => _tool = CollageTool.layout);
+    }
   }
 
   Future<List<PhotoItem>> _pick(int max) async {
@@ -262,6 +279,7 @@ class _CollagePageState extends State<CollagePage> {
     );
     if (ok == true) {
       c.clear();
+      _resetView();
       setState(() => _tool = CollageTool.layout);
     }
   }
@@ -426,34 +444,43 @@ class _CollagePageState extends State<CollagePage> {
 
   Widget _editor() {
     final theme = Theme.of(context);
+    final canvas = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: CollageCanvas(
+        controller: c,
+        boundaryKey: _boundaryKey,
+        onAddPhoto: _addPhotos,
+      ),
+    );
     return SafeArea(
       bottom: false,
       child: Column(
         children: [
           Expanded(
-            child: GestureDetector(
-              // Tapping the background clears the selection.
-              onTap: () => c.select(null),
-              behavior: HitTestBehavior.translucent,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: CollageCanvas(
-                  controller: c,
-                  boundaryKey: _boundaryKey,
-                  onAddPhoto: _addPhotos,
-                ),
-              ),
-            ),
+            child: _zoomingView
+                // Gestures move the view only; the collage can't be touched.
+                ? InteractiveViewer(
+                    key: const Key('zoom-view'),
+                    transformationController: _view,
+                    minScale: 1,
+                    maxScale: 8,
+                    child: IgnorePointer(child: canvas),
+                  )
+                : ClipRect(
+                    child: AnimatedBuilder(
+                      animation: _view,
+                      builder: (context, child) =>
+                          Transform(transform: _view.value, child: child),
+                      child: GestureDetector(
+                        // Tapping the background clears the selection.
+                        onTap: () => c.select(null),
+                        behavior: HitTestBehavior.translucent,
+                        child: canvas,
+                      ),
+                    ),
+                  ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-            child: Text(
-              _tool.hint,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ),
+          _editBar(theme),
           const Divider(height: 8),
           ConstrainedBox(
             constraints: BoxConstraints(
@@ -467,6 +494,56 @@ class _CollagePageState extends State<CollagePage> {
                 onReplace: _replaceSelected,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Undo · Redo · the tool's hint · Fit (when zoomed) · Zoom view.
+  Widget _editBar(ThemeData theme) {
+    final zoomed = !_view.value.isIdentity();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: 'Undo',
+            visualDensity: VisualDensity.compact,
+            onPressed: _saving || !c.canUndo ? null : c.undo,
+          ),
+          IconButton(
+            icon: const Icon(Icons.redo),
+            tooltip: 'Redo',
+            visualDensity: VisualDensity.compact,
+            onPressed: _saving || !c.canRedo ? null : c.redo,
+          ),
+          Expanded(
+            child: Text(
+              _zoomingView
+                  ? 'Pinch or scroll to zoom the view · drag to look around · '
+                      'the collage stays as it is'
+                  : _tool.hint,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+          if (zoomed || _zoomingView)
+            IconButton(
+              icon: const Icon(Icons.fit_screen_outlined),
+              tooltip: 'Fit to screen',
+              visualDensity: VisualDensity.compact,
+              onPressed: _resetView,
+            ),
+          IconButton(
+            icon: const Icon(Icons.zoom_in),
+            selectedIcon: const Icon(Icons.edit_outlined),
+            isSelected: _zoomingView,
+            tooltip: _zoomingView ? 'Back to editing' : 'Zoom the view',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() => _zoomingView = !_zoomingView),
           ),
         ],
       ),
