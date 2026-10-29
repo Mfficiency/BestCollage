@@ -11,11 +11,15 @@ import '../app_settings.dart';
 import '../util/app_version.dart';
 import '../util/date_time_format.dart';
 import 'log_service.dart';
+import 'startup_time_service.dart';
 
 export 'package:mfficiency_updates/mfficiency_updates.dart'
     show
         FullBackup,
         FullBackupTiles,
+        ProblemReporter,
+        ProblemReportSettingsTile,
+        ProblemReportTrigger,
         ReleaseBuildInfo,
         UpdateBanner,
         UpdateCheckTileText,
@@ -51,9 +55,13 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 ///   one file in `Download/BestCollage/Backups/`, which stays when the app
 ///   is uninstalled. "Back up everything" / "Restore from a backup" in
 ///   Settings › Backup & data, a one-time restore offer on a new install, and one
-///   before every update (`beforeInstall`).
+///   before every update (`beforeInstall`);
+/// * "Report a problem to Claude" ([problemReport]): a double tap on the
+///   version in the drawer sends a description and the app's logs as a
+///   GitHub issue in [repo], which `.github/workflows/claude-fix.yml` hands
+///   to Claude (the package's README.md › Problem reports to Claude).
 class AppUpdates {
-  AppUpdates._(this.controller, this.backup, this._tokens);
+  AppUpdates._(this.controller, this.backup, this._tokens, this.problemReport);
 
   /// The app's updates. [init] sets it in `main`; until then (widget tests
   /// that build a page alone) an in-memory one that never checks by itself.
@@ -85,6 +93,15 @@ class AppUpdates {
 
   final UpdateController controller;
   final UpdateTokenStore _tokens;
+
+  /// The GitHub token for problem reports (fine-grained, Issues: Read and
+  /// write) under this key in the same secure storage as [tokenKey].
+  static const String problemReportTokenKey = 'problem_report.github_token';
+
+  /// "Report a problem to Claude" (drawer version double tap; Settings ›
+  /// Updates › Problem reports to Claude explains and holds the token).
+  /// Logs: [collectLogs]; links open through url_launcher.
+  final ProblemReporter problemReport;
 
   /// A token is saved (and sent with every GitHub request).
   bool get hasToken => controller.hasToken;
@@ -189,7 +206,48 @@ class AppUpdates {
           'update', data.isEmpty ? event : '$event ${jsonEncode(data)}'),
       clock: clock,
     );
-    return updates = AppUpdates._(controller, backup, tokenStore);
+    final problemReport = ProblemReporter(
+      config: ProblemReportConfig(
+        appName: 'BestCollage',
+        version: AppVersion.version,
+        build: AppVersion.buildNumber,
+        channel: AppVersion.channel,
+        githubRepo: repo,
+      ),
+      collectLogs: collectLogs,
+      readToken: () => tokenStore.read(problemReportTokenKey),
+      writeToken: (token) => token == null
+          ? tokenStore.delete(problemReportTokenKey)
+          : tokenStore.write(problemReportTokenKey, token),
+      openUrl: _openUrl,
+    );
+    return updates =
+        AppUpdates._(controller, backup, tokenStore, problemReport);
+  }
+
+  /// The logs a problem report carries, oldest first, newest last: the
+  /// recent launches (startup times, kept on disk) and the in-memory App
+  /// Logs of this run (last 24 h: the app's events, updates, backups,
+  /// startup).
+  static Future<String> collectLogs() async {
+    final out = StringBuffer();
+    final launches = await StartupTimeService.getStartupHistory();
+    final recent = launches.length > 20
+        ? launches.sublist(launches.length - 20)
+        : launches;
+    out.writeln('== Recent launches (startup_history.json) ==');
+    if (recent.isEmpty) out.writeln('(none)');
+    for (final r in recent) {
+      out.writeln('${r.at.toIso8601String()} ready in ${r.ms} ms');
+    }
+    out.writeln();
+    out.writeln('== App Logs (this run, last 24 h) ==');
+    final entries = LogService.logs.value;
+    if (entries.isEmpty) out.writeln('(none)');
+    for (final line in entries) {
+      out.writeln(line);
+    }
+    return out.toString();
   }
 
   /// In `main`, before the first frame (no network) and before the app

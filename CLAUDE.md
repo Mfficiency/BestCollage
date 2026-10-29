@@ -160,6 +160,24 @@ APK).
   (installs older than 0.4.1 read them); the channel builds go into its
   `<channel>/` subfolders. The updater reads neither — only the GitHub
   releases.
+- Report a problem to Claude (package 1.7.0, README.md › Problem reports to
+  Claude): a **double tap on the version** in the drawer header
+  (`app_drawer.dart`, `ProblemReportTrigger`) opens a sheet (description,
+  "Include the app's logs", Send to Claude). Send makes a GitHub issue in
+  Mfficiency/BestCollage (label `claude-fix`, marker
+  `<!-- mfficiency-problem-report -->`); `.github/workflows/claude-fix.yml`
+  has Claude fix it like any other request, merge into `dev`, push, and asks
+  the laptop to build it. `AppUpdates.problemReport` holds the config; logs =
+  `AppUpdates.collectLogs` (the last 20 launches from the startup history,
+  then the in-memory App Logs of `LogService`, oldest first). Its token
+  (fine-grained, Issues: Read and write) is in the same secure storage as the
+  updates token (`AppUpdates.problemReportTokenKey`); Settings › Updates ›
+  Problem reports to Claude (`ProblemReportSettingsTile`) explains it.
+  Without a token the report opens GitHub's new-issue page in the browser.
+  Once per repo (by hand, on GitHub): the Actions secret
+  `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, Claude Pro/Max) or
+  `ANTHROPIC_API_KEY`, and the Claude GitHub app installed on the repo.
+  Tests: `test/problem_report_test.dart`.
 
 ## Conventions
 

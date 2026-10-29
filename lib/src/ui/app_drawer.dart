@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_config.dart';
 import '../models/menu_entry.dart';
+import '../services/app_updates.dart';
 import '../util/app_version.dart';
 import 'about_page.dart';
 import 'app_logs_page.dart';
@@ -68,13 +69,17 @@ class AppDrawer extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(
                 16, MediaQuery.paddingOf(context).top + 16, 16, 16),
             color: scheme.primary,
-            child: FutureBuilder<void>(
-              future: AppVersion.ensureLoaded(),
-              builder: (context, _) => Text(
-                '${AppConfig.appName} v${AppVersion.versionWithBuild}'
-                '${AppVersion.channelSuffix}',
-                key: const Key('drawer-version'),
-                style: TextStyle(color: scheme.onPrimary, fontSize: 18),
+            // Double tap: "Report a problem to Claude" (AppUpdates).
+            child: ProblemReportTrigger(
+              reporter: AppUpdates.instance.problemReport,
+              child: FutureBuilder<void>(
+                future: AppVersion.ensureLoaded(),
+                builder: (context, _) => Text(
+                  '${AppConfig.appName} v${AppVersion.versionWithBuild}'
+                  '${AppVersion.channelSuffix}',
+                  key: const Key('drawer-version'),
+                  style: TextStyle(color: scheme.onPrimary, fontSize: 18),
+                ),
               ),
             ),
           ),

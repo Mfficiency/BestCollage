@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.18] - 2026-10-29
+- Report a problem to Claude: double-tap the version at the top of the menu, describe what went wrong and send it with the app's logs; Claude fixes it and the fix arrives as the next update. Settings › Updates › Problem reports to Claude explains the GitHub token that sends reports straight from the app (without one the report opens on GitHub in the browser). Updates package 1.7.0
+
 ## [0.4.17] - 2026-10-24
 - Settings: every section starts collapsed each time you open it; tap a section, its chip or a search result to open it
 

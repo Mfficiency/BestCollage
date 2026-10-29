@@ -86,6 +86,11 @@ class _SettingsPageState extends State<SettingsPage> {
       2,
       'token key private pat github access',
     ),
+    _SearchEntry(
+      'Problem reports to Claude',
+      2,
+      'claude bug problem report github token issue logs',
+    ),
     _SearchEntry('Export everything', 3, 'backup save json data settings file'),
     _SearchEntry('Export settings', 3, 'backup save json preferences'),
     _SearchEntry('Import', 3, 'restore backup load json file'),
@@ -399,6 +404,9 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ),
+      // The GitHub token for "Report a problem to Claude" (double tap on
+      // the version in the menu) and how to get one.
+      ProblemReportSettingsTile(reporter: AppUpdates.instance.problemReport),
     ]);
   }
 
