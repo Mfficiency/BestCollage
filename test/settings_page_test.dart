@@ -1,13 +1,39 @@
 import 'package:best_collage/best_collage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mfficiency_updates/mfficiency_updates.dart' show UpdatePlatform;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() {
     AppSettings.instance.resetForTest();
     AppVersion.setForTest('1.0.0', '1');
   });
-  tearDown(AppVersion.resetForTest);
+  tearDown(() {
+    AppVersion.resetForTest();
+    AppUpdates.resetForTest();
+  });
+
+  /// The titles of every row, top to bottom, under each section header.
+  Map<String, List<String>> rowsBySection(WidgetTester tester) {
+    final out = <String, List<String>>{};
+    for (final section in tester.widgetList<SettingsSection>(
+        find.byType(SettingsSection))) {
+      final tiles = find.descendant(
+        of: find.byWidget(section),
+        // A SwitchListTile draws a ListTile too.
+        matching: find.byType(ListTile),
+      );
+      out[section.title] = [
+        for (final e in tiles.evaluate())
+          switch (e.widget) {
+            ListTile(:final Text title) => title.data ?? '',
+            _ => '',
+          },
+      ]..removeWhere((t) => t.isEmpty);
+    }
+    return out;
+  }
 
   testWidgets('renders section chips and settings controls', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
@@ -19,6 +45,7 @@ void main() {
     for (final title in const [
       'Appearance',
       'Collage',
+      'Debugging',
       'Updates',
       'Backup & data'
     ]) {
@@ -26,7 +53,8 @@ void main() {
     }
     // A few representative controls from the first section.
     expect(find.text('Minimalist mode'), findsOneWidget);
-    expect(find.text('24-hour time'), findsOneWidget);
+    expect(find.text('Time format'), findsOneWidget);
+    expect(find.text('Compact mode'), findsOneWidget);
     expect(find.text('Date format'), findsOneWidget);
 
     // Jump to the Collage section via its chip and confirm its controls.
@@ -75,8 +103,8 @@ void main() {
   });
 
   testWidgets(
-      'sections: Appearance first, Updates second to last, '
-      'Backup & data last', (tester) async {
+      'sections: Appearance first; Debugging, Updates, Backup & data last',
+      (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
 
@@ -84,7 +112,8 @@ void main() {
         .widgetList<ChoiceChip>(find.byType(ChoiceChip))
         .map((c) => (c.label as Text).data)
         .toList();
-    expect(chips, ['Appearance', 'Collage', 'Updates', 'Backup & data']);
+    expect(chips,
+        ['Appearance', 'Collage', 'Debugging', 'Updates', 'Backup & data']);
 
     // The cards are in the same order as the chips.
     final cardTops = [
@@ -159,5 +188,74 @@ void main() {
     await tester.enterText(find.byType(TextField), 'zzzz');
     await tester.pumpAndSettle();
     expect(find.text('No settings match your search'), findsOneWidget);
+  });
+
+  testWidgets('every section has the standard rows in the standard order',
+      (tester) async {
+    // Like a phone, so the full backup's rows show.
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    AppUpdates.instance = AppUpdates.create(
+      prefs: prefs,
+      platform: UpdatePlatform(supported: true),
+      backupRoots: () async => const {},
+    );
+    await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Expand all'));
+    await tester.pumpAndSettle();
+
+    expect(rowsBySection(tester), {
+      'Appearance': [
+        'Compact mode',
+        'Time format',
+        'Date format',
+        'Minimalist mode',
+      ],
+      'Collage': ['Export size', 'Date stamp on new collages'],
+      'Debugging': ['Send a report', 'GitHub token'],
+      'Updates': [
+        'Automatically check for updates',
+        'Check for updates',
+        'GitHub token',
+      ],
+      'Backup & data': [
+        'Back up everything',
+        'Restore from a backup',
+        'Backup location',
+        'Automatic backup',
+        'Last backup',
+        'Export everything',
+        'Export settings',
+        'Import',
+      ],
+    });
+    // Theme (dark mode) is the first row of Appearance (a segmented row).
+    final theme = tester.getTopLeft(find.text('Theme')).dy;
+    expect(theme, lessThan(tester.getTopLeft(find.text('Compact mode')).dy));
+  });
+
+  testWidgets('compact mode and time format work app-wide', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand Appearance'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Compact mode'));
+    await tester.pumpAndSettle();
+    expect(AppSettings.instance.compact, isTrue);
+    expect(AppTheme.light(AppSettings.instance).visualDensity,
+        VisualDensity.compact);
+    expect(AppTheme.dark(AppSettings.instance).visualDensity,
+        VisualDensity.compact);
+    expect(AppSettings.instance.toMap()['compact'], isTrue);
+
+    expect(find.text('14:30'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings.timeFormat')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('12-hour').last);
+    await tester.pumpAndSettle();
+    expect(AppSettings.instance.use24HourFormat, isFalse);
+    expect(formatTime(DateTime(2026, 3, 9, 14, 30)), '2:30 PM');
   });
 }

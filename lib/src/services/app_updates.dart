@@ -16,19 +16,23 @@ import 'startup_time_service.dart';
 export 'package:mfficiency_updates/mfficiency_updates.dart'
     show
         FullBackup,
+        FullBackupStrings,
         FullBackupTiles,
         OtherAppsController,
         OtherAppsLink,
         ProblemReporter,
+        ProblemReportSendTile,
         ProblemReportSettingsTile,
         ProblemReportTrigger,
         ReleaseBuildInfo,
         UpdateBanner,
+        UpdateCheckTile,
         UpdateCheckTileText,
         UpdateController,
         UpdateResult,
         UpdateStatus,
-        UpdateStatusCard;
+        UpdateStatusCard,
+        UpdateTokenTile;
 
 /// BestCollage's side of the shared updates package
 /// (`packages/mfficiency_updates`, vendored from flutter_app_template, never
@@ -40,8 +44,9 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 ///
 /// * the public repo Mfficiency/BestCollage, tags `v<x.y.z>-<build>[-dev|
 ///   -staging]` of every channel, a 15-minute poll;
-/// * an optional GitHub token (Settings › Updates › GitHub token, [tokenKey])
-///   in secure storage ([UpdateTokenStore]): not needed while the repo is
+/// * an optional GitHub token (Settings › Updates › GitHub token, the
+///   package's `UpdateTokenTile`, [tokenKey]) in secure storage
+///   ([UpdateTokenStore]): not needed while the repo is
 ///   public; with one the package (1.6.3+) already downloads through the
 ///   asset API, so the app keeps updating if the repo turns private.
 ///   [privateRepo] stays false (true without a token stops updates);
@@ -108,8 +113,8 @@ class AppUpdates {
   /// write) under this key in the same secure storage as [tokenKey].
   static const String problemReportTokenKey = 'problem_report.github_token';
 
-  /// "Report a problem to Claude" (drawer version double tap; Settings ›
-  /// Updates › Problem reports to Claude explains and holds the token).
+  /// "Report a problem to Claude" (drawer version double tap, or Settings ›
+  /// Debugging › Send a report; Debugging › GitHub token holds the token).
   /// Logs: [collectLogs]; links open through url_launcher.
   final ProblemReporter problemReport;
 
@@ -118,9 +123,6 @@ class AppUpdates {
   /// out). Private apps are read with the problem-report token when it can
   /// read them, or with the page's own token (its key icon).
   final OtherAppsController otherApps;
-
-  /// A token is saved (and sent with every GitHub request).
-  bool get hasToken => controller.hasToken;
 
   /// What the package's `tokenProvider` reads: the saved token, or null
   /// (none, or secure storage failed: then updating works as without one).
@@ -134,9 +136,10 @@ class AppUpdates {
     }
   }
 
-  /// Saves (or with null / empty removes) the token, then
-  /// [UpdateController.reloadToken] (which checks at once).
-  Future<UpdateResult> setToken(String? token) async {
+  /// Saves (or with null / empty removes) the token, for the package's
+  /// [UpdateTokenTile] (Settings › Updates › GitHub token), which then
+  /// calls [UpdateController.reloadToken] (a check at once).
+  Future<void> writeToken(String? token) async {
     final t = token?.trim() ?? '';
     try {
       if (t.isEmpty) {
@@ -147,7 +150,6 @@ class AppUpdates {
     } catch (e) {
       LogService.add('update', 'token.write failed ${e.runtimeType}');
     }
-    return controller.reloadToken();
   }
 
   /// The full backup to Downloads; null when [create] got no preferences
@@ -178,14 +180,14 @@ class AppUpdates {
     final settings = AppSettings.instance;
     final tokenStore = tokens ?? MemoryUpdateTokenStore();
     late final AppUpdates updates;
-    final updatePlatform = platform ?? UpdatePlatform(openUrl: _openUrl);
+    final updatePlatform = platform ?? UpdatePlatform(openUrl: openUrl);
     final backup = prefs == null
         ? null
         : FullBackup(
             config: const FullBackupConfig(
               appName: 'BestCollage',
               keep: keepBackups,
-              excludedPrefixes: {tokenKey},
+              excludedPrefixes: {tokenKey, problemReportTokenKey},
             ),
             version: AppVersion.version,
             build: AppVersion.buildNumber,
@@ -235,7 +237,7 @@ class AppUpdates {
       writeToken: (token) => token == null
           ? tokenStore.delete(problemReportTokenKey)
           : tokenStore.write(problemReportTokenKey, token),
-      openUrl: _openUrl,
+      openUrl: openUrl,
     );
     final otherApps = OtherAppsController(
       currentAppId: appId,
@@ -298,9 +300,16 @@ class AppUpdates {
     date: formatDate,
   );
 
-  /// Links (any update off Android, e.g. on the Windows desktop) open in the
-  /// browser through url_launcher.
-  static Future<bool> _openUrl(String url) =>
+  /// The full backup's English texts with the app's date and time formats
+  /// (Last backup, the restore offer).
+  static FullBackupStrings get backupStrings => FullBackupStrings(
+        dateTime: (d) => '${formatDate(d)} ${formatTime(d)}',
+      );
+
+  /// Links (any update off Android, e.g. on the Windows desktop, and the
+  /// token pages of the settings rows) open in the browser through
+  /// url_launcher.
+  static Future<bool> openUrl(String url) =>
       launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 
   /// 0.4.14 saved the token in the preferences: moves it into secure

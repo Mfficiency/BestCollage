@@ -62,7 +62,10 @@ class CollageAppState extends State<CollageApp> {
     final context = _navigatorKey.currentContext;
     final backup = AppUpdates.instance.backup;
     if (!mounted || context == null || backup == null) return;
-    unawaited(backup.offerRestore(context));
+    unawaited(backup.offerRestore(context, strings: AppUpdates.backupStrings));
+    // Settings › Backup & data › Automatic backup: one now when due, and
+    // whenever the app comes back to the foreground.
+    backup.startSchedule();
   }
 
   @override

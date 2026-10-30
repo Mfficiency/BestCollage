@@ -39,6 +39,10 @@ class AppSettings extends ChangeNotifier {
   // --- Appearance -----------------------------------------------------------
   AppThemeMode themeMode = AppThemeMode.system;
   bool minimalist = false;
+
+  /// Compact mode: tighter spacing in every screen through the theme's
+  /// visual density ([AppTheme]).
+  bool compact = false;
   bool use24HourFormat = true;
   String dateFormat = dateFormats.first;
 
@@ -122,6 +126,7 @@ class AppSettings extends ChangeNotifier {
   Map<String, dynamic> toMap() => {
         'themeMode': themeMode.name,
         'minimalist': minimalist,
+        'compact': compact,
         'use24HourFormat': use24HourFormat,
         'dateFormat': dateFormat,
         'startPageKey': startPageKey,
@@ -149,6 +154,7 @@ class AppSettings extends ChangeNotifier {
       }
     }
     minimalist = data['minimalist'] as bool? ?? minimalist;
+    compact = data['compact'] as bool? ?? compact;
     use24HourFormat = data['use24HourFormat'] as bool? ?? use24HourFormat;
 
     final fmt = data['dateFormat'] as String?;
@@ -192,6 +198,7 @@ class AppSettings extends ChangeNotifier {
   void resetForTest() {
     themeMode = AppThemeMode.system;
     minimalist = false;
+    compact = false;
     use24HourFormat = true;
     dateFormat = dateFormats.first;
     startPageKey = AppConfig.startPages.first.key;

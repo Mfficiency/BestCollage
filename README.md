@@ -19,8 +19,8 @@ Logs, Startup Times, Test Results).
   describe it, send it with the app's logs. It becomes a GitHub issue here
   (label `claude-fix`) that `.github/workflows/claude-fix.yml` hands to
   Claude, which fixes it, merges into `dev` and pushes, so the fix ships as
-  the next update. Settings › Updates › Problem reports to Claude explains
-  the GitHub token (fine-grained, Issues: Read and write) that sends it from
+  the next update (or Settings › Debugging › Send a report). Settings ›
+  Debugging › GitHub token explains the GitHub token (fine-grained, Issues: Read and write) that sends it from
   the app; without one it opens on GitHub in the browser. One-time setup on
   GitHub: the Actions secret `CLAUDE_CODE_OAUTH_TOKEN` (`claude
   setup-token`) or `ANTHROPIC_API_KEY`, and the Claude GitHub app installed.

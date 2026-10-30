@@ -16,8 +16,14 @@ import 'widgets/spacing.dart';
 ///  * A **search** (magnifier in the app bar) that filters every individual
 ///    setting by title/keyword; tapping a result opens and jumps to its section.
 ///  * Foldable section cards ([SettingsSection]) with Collapse/Expand all.
-///    Order: Appearance first, the app's own sections, Updates second to
-///    last, Backup & data last.
+///    Order and rows as in every Mfficiency app (the template's
+///    docs/CONCEPT.md §5): Appearance first (Theme · Compact mode · Time
+///    format · Date format, then the app's own), the app's sections, then
+///    Debugging (Send a report · GitHub token), Updates (Check
+///    automatically · Check for updates · GitHub token) and Backup & data
+///    (Back up everything · Restore from a backup · Backup location ·
+///    Automatic backup · Last backup, then the app's own) last. The shared
+///    rows are the updates package's tiles.
 ///
 /// Every setting reads and writes [AppSettings]; saving notifies listeners so
 /// the theme updates instantly. Export/import use the versioned
@@ -44,6 +50,7 @@ class _SettingsPageState extends State<SettingsPage> {
   static const List<String> _sectionTitles = [
     'Appearance',
     'Collage',
+    'Debugging',
     'Updates',
     'Backup & data',
   ];
@@ -62,48 +69,53 @@ class _SettingsPageState extends State<SettingsPage> {
       0,
       'appearance system light dark night colour color mode',
     ),
+    _SearchEntry('Compact mode', 0, 'dense density tight spacing small'),
+    _SearchEntry('Time format', 0, 'clock am pm 12-hour 24-hour'),
+    _SearchEntry('Date format', 0, 'display day month year'),
     _SearchEntry(
       'Minimalist mode',
       0,
       'monochrome calm plain simple no colours underline',
     ),
-    _SearchEntry('24-hour time', 0, 'clock am pm 12-hour format'),
-    _SearchEntry('Date format', 0, 'display day month year'),
     _SearchEntry('Export size', 1, 'resolution pixels quality save picture'),
     _SearchEntry('Date stamp on new collages', 1, 'date taken show default'),
+    _SearchEntry('Send a report', 2, 'claude bug problem report issue logs fix'),
     _SearchEntry(
-      'Check for updates',
+      'GitHub token (problem reports)',
       2,
-      'update upgrade new version install apk download latest',
+      'token key pat github claude report issue',
     ),
     _SearchEntry(
       'Automatically check for updates',
-      2,
+      3,
       'update upgrade new version install apk download',
     ),
     _SearchEntry(
-      'GitHub token (optional)',
-      2,
+      'Check for updates',
+      3,
+      'update upgrade new version install apk download latest',
+    ),
+    _SearchEntry(
+      'GitHub token (updates)',
+      3,
       'token key private pat github access',
     ),
     _SearchEntry(
-      'Problem reports to Claude',
-      2,
-      'claude bug problem report github token issue logs',
-    ),
-    _SearchEntry('Export everything', 3, 'backup save json data settings file'),
-    _SearchEntry('Export settings', 3, 'backup save json preferences'),
-    _SearchEntry('Import', 3, 'restore backup load json file'),
-    _SearchEntry(
       'Back up everything',
-      3,
+      4,
       'backup full downloads photos collages reinstall uninstall',
     ),
     _SearchEntry(
       'Restore from a backup',
-      3,
+      4,
       'restore backup full downloads reinstall',
     ),
+    _SearchEntry('Backup location', 4, 'folder downloads where'),
+    _SearchEntry('Automatic backup', 4, 'schedule daily weekly off backup'),
+    _SearchEntry('Last backup', 4, 'when backup date'),
+    _SearchEntry('Export everything', 4, 'backup save json data settings file'),
+    _SearchEntry('Export settings', 4, 'backup save json preferences'),
+    _SearchEntry('Import', 4, 'restore backup load json file'),
   ];
 
   @override
@@ -298,19 +310,27 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
         SwitchListTile(
-          title: const Text('Minimalist mode'),
+          title: const Text('Compact mode'),
           subtitle: const Text(
-            'Calm monochrome look: no colours, underlines instead of '
-            'highlights',
+            'Tighter spacing in lists, menus and every screen',
           ),
-          value: _s.minimalist,
-          onChanged: (v) => _apply(() => _s.minimalist = v),
+          value: _s.compact,
+          onChanged: (v) => _apply(() => _s.compact = v),
         ),
-        SwitchListTile(
-          title: const Text('24-hour time'),
-          subtitle: const Text('Turn off for 12-hour AM/PM time'),
-          value: _s.use24HourFormat,
-          onChanged: (v) => _apply(() => _s.use24HourFormat = v),
+        ListTile(
+          title: const Text('Time format'),
+          subtitle: Text(formatTime(DateTime(2026, 3, 9, 14, 30))),
+          trailing: DropdownButton<bool>(
+            key: const Key('settings.timeFormat'),
+            value: _s.use24HourFormat,
+            items: const [
+              DropdownMenuItem(value: true, child: Text('24-hour')),
+              DropdownMenuItem(value: false, child: Text('12-hour')),
+            ],
+            onChanged: (v) {
+              if (v != null) _apply(() => _s.use24HourFormat = v);
+            },
+          ),
         ),
         ListTile(
           title: const Text('Date format'),
@@ -324,6 +344,15 @@ class _SettingsPageState extends State<SettingsPage> {
               if (v != null) _apply(() => _s.dateFormat = v);
             },
           ),
+        ),
+        SwitchListTile(
+          title: const Text('Minimalist mode'),
+          subtitle: const Text(
+            'Calm monochrome look: no colours, underlines instead of '
+            'highlights',
+          ),
+          value: _s.minimalist,
+          onChanged: (v) => _apply(() => _s.minimalist = v),
         ),
       ]);
 
@@ -353,30 +382,22 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ]);
 
-  Widget _updatesSection() {
-    final controller = AppUpdates.instance.controller;
+  /// Send a report (to Claude) · GitHub token (for the reports).
+  Widget _debuggingSection() {
+    final reporter = AppUpdates.instance.problemReport;
     return _section(2, [
-      // Checks now; a newer build downloads silently and Android asks
-      // "Update this app?" when it is complete. Progress as the subtitle.
-      ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) {
-          final busy = controller.checking.value;
-          return ListTile(
-            key: const Key('settings.update.check'),
-            title: Text(controller.checkTileTitle(context)),
-            subtitle: Text(controller.checkTileSubtitle(context)),
-            trailing: busy
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : null,
-            onTap: busy ? null : () => controller.checkNow(context),
-          );
-        },
-      ),
+      ProblemReportSendTile(reporter: reporter),
+      ProblemReportSettingsTile(reporter: reporter),
+    ]);
+  }
+
+  /// Check automatically · Check for updates · GitHub token (read access to
+  /// the release repo, needed once it is private).
+  Widget _updatesSection() {
+    final updates = AppUpdates.instance;
+    return _section(3, [
       SwitchListTile(
+        secondary: const Icon(Icons.update),
         title: const Text('Automatically check for updates'),
         subtitle: const Text(
           'Checks for a newer version every 15 minutes while the app is '
@@ -387,72 +408,46 @@ class _SettingsPageState extends State<SettingsPage> {
         value: _s.autoUpdateCheckEnabled,
         onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
       ),
-      ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) => ListTile(
-          key: const Key('settings.update.token'),
-          title: const Text('GitHub token (optional)'),
-          subtitle: Text(
-            AppUpdates.instance.hasToken
-                ? 'Saved: ••••••••. Only needed if this app’s repo is '
-                    'private.'
-                : 'Only needed if this app’s repo is private.',
-          ),
-          onTap: () => showDialog<void>(
-            context: context,
-            builder: (_) => const _TokenDialog(),
-          ),
-        ),
+      // Checks now; a newer build downloads silently and Android asks
+      // "Update this app?" when it is complete. Progress as the subtitle.
+      UpdateCheckTile(controller: updates.controller),
+      UpdateTokenTile(
+        controller: updates.controller,
+        repo: AppUpdates.repo,
+        readToken: updates.readToken,
+        writeToken: updates.writeToken,
+        openUrl: AppUpdates.openUrl,
       ),
-      // The GitHub token for "Report a problem to Claude" (double tap on
-      // the version in the menu) and how to get one.
-      ProblemReportSettingsTile(reporter: AppUpdates.instance.problemReport),
     ]);
   }
 
-  Widget _dataSection() => _section(3, [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.xs,
-            AppSpacing.lg,
-            AppSpacing.lg,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              FilledButton.icon(
-                onPressed: () => _export(includeData: true),
-                icon: const Icon(Icons.file_download),
-                label: const Text('Export Everything'),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              FilledButton.icon(
-                onPressed: () => _export(includeData: false),
-                icon: const Icon(Icons.tune),
-                label: const Text('Export Settings'),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Restore',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              FilledButton.icon(
-                onPressed: _import,
-                icon: const Icon(Icons.file_upload),
-                label: const Text('Import'),
-              ),
-            ],
-          ),
-        ),
+  /// The full backup's five rows (Android only), then the app's own JSON
+  /// export and import.
+  Widget _dataSection() => _section(4, [
         // Everything (collages, photo copies, settings) as one file in
         // Download/BestCollage/Backups, kept when the app is uninstalled.
-        // Android only (nothing elsewhere).
         if (AppUpdates.instance.backup case final backup?)
-          FullBackupTiles(backup: backup),
+          FullBackupTiles(backup: backup, strings: AppUpdates.backupStrings),
+        ListTile(
+          leading: const Icon(Icons.file_download),
+          title: const Text('Export everything'),
+          subtitle: const Text(
+            'Settings and data as a JSON file in a folder you pick',
+          ),
+          onTap: () => _export(includeData: true),
+        ),
+        ListTile(
+          leading: const Icon(Icons.tune),
+          title: const Text('Export settings'),
+          subtitle: const Text('Only the settings, as a JSON file'),
+          onTap: () => _export(includeData: false),
+        ),
+        ListTile(
+          leading: const Icon(Icons.file_upload),
+          title: const Text('Import'),
+          subtitle: const Text('Settings and data from an exported JSON file'),
+          onTap: _import,
+        ),
       ]);
 
   Widget _buildSearchField() => TextField(
@@ -577,6 +572,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             _appearanceSection(),
                             _collageSection(),
+                            _debuggingSection(),
                             _updatesSection(),
                             _dataSection(),
                             // Lets the last section scroll to the top.
@@ -616,94 +612,4 @@ class _TabsHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _TabsHeaderDelegate old) =>
       old.height != height || old.child != child;
-}
-
-/// Pastes, replaces or removes the GitHub token ([AppUpdates.setToken]),
-/// then says what GitHub made of it.
-class _TokenDialog extends StatefulWidget {
-  const _TokenDialog();
-
-  @override
-  State<_TokenDialog> createState() => _TokenDialogState();
-}
-
-class _TokenDialogState extends State<_TokenDialog> {
-  final TextEditingController _field = TextEditingController();
-  bool _busy = false;
-  String? _message;
-
-  @override
-  void dispose() {
-    _field.dispose();
-    super.dispose();
-  }
-
-  Future<void> _set(String? token) async {
-    if (token != null && token.trim().isEmpty) return;
-    setState(() => _busy = true);
-    final r = await AppUpdates.instance.setToken(token);
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _message = switch (r.status) {
-        _ when token == null => 'Removed.',
-        UpdateStatus.badToken =>
-          'GitHub refused this token: wrong, expired or no access to '
-              '${AppUpdates.repo}.',
-        UpdateStatus.failed ||
-        UpdateStatus.rateLimited =>
-          'Saved, but GitHub could not be reached to check it.',
-        _ => 'Saved. GitHub accepted it.',
-      };
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('GitHub token (optional)'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Fine-grained token with read-only Contents access to '
-              '${AppUpdates.repo}. Only needed if the repo is private; '
-              'it stays in this device’s secure storage, out of '
-              'backups and logs.',
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              key: const Key('settings.update.token.field'),
-              controller: _field,
-              obscureText: true,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: const InputDecoration(
-                labelText: 'Token',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_message case final m?) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(m, key: const Key('settings.update.token.message')),
-            ],
-          ],
-        ),
-        actions: [
-          if (AppUpdates.instance.hasToken)
-            TextButton(
-              onPressed: _busy ? null : () => _set(null),
-              child: const Text('Remove'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            key: const Key('settings.update.token.save'),
-            onPressed: _busy ? null : () => _set(_field.text),
-            child: const Text('Save'),
-          ),
-        ],
-      );
 }

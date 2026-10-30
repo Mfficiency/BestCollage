@@ -199,29 +199,33 @@ void main() {
       );
       await u.controller.init();
       AppUpdates.instance = u;
-      expect(u.hasToken, isFalse);
+      expect(u.controller.hasToken, isFalse);
       expect(await u.readToken(), isNull);
       expect(AppUpdates.privateRepo, isFalse,
           reason: 'true without a token would stop updates');
 
-      await u.setToken('  github_pat_abc  ');
+      await u.writeToken('  github_pat_abc  ');
+      await u.controller.reloadToken();
       expect(tokens.values[AppUpdates.tokenKey], 'github_pat_abc');
       expect(await u.readToken(), 'github_pat_abc');
       expect(prefs.getKeys(), isNot(contains(AppUpdates.tokenKey)),
           reason: 'never in plain preferences');
-      expect(u.hasToken, isTrue);
+      expect(u.controller.hasToken, isTrue);
       expect(github.headers.last['Authorization'], 'Bearer github_pat_abc');
-      expect(u.backup!.config.excludedPrefixes, {AppUpdates.tokenKey});
+      expect(u.backup!.config.excludedPrefixes,
+          {AppUpdates.tokenKey, AppUpdates.problemReportTokenKey});
 
       github.status = 401;
-      expect((await u.setToken('github_pat_wrong')).status,
+      await u.writeToken('github_pat_wrong');
+      expect((await u.controller.reloadToken()).status,
           UpdateStatus.badToken);
 
       github.status = 200;
-      await u.setToken(null);
+      await u.writeToken(null);
+      await u.controller.reloadToken();
       expect(tokens.values, isEmpty);
       expect(await u.readToken(), isNull);
-      expect(u.hasToken, isFalse);
+      expect(u.controller.hasToken, isFalse);
       expect(github.headers.last.containsKey('Authorization'), isFalse);
     });
 
@@ -238,7 +242,7 @@ void main() {
       );
       await u.controller.init();
       expect(await u.readToken(), isNull);
-      expect(u.hasToken, isFalse);
+      expect(u.controller.hasToken, isFalse);
       expect((await u.controller.check()).status, UpdateStatus.available);
       expect(github.headers.last.containsKey('Authorization'), isFalse);
       u.controller.dispose();
@@ -293,7 +297,8 @@ void main() {
       expect(AppUpdates.keepBackups, 4);
       expect(b.config.excluded, isEmpty,
           reason: 'collages/ (thumbs, photo copies) is all data');
-      expect(b.config.excludedPrefixes, {AppUpdates.tokenKey},
+      expect(b.config.excludedPrefixes,
+          {AppUpdates.tokenKey, AppUpdates.problemReportTokenKey},
           reason: 'the GitHub token stays out of Downloads');
       expect(b.platform, same(platform));
       expect(b.version, AppVersion.version);
