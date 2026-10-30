@@ -15,13 +15,24 @@ import '../app_settings.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData light(AppSettings s) => s.minimalist
-      ? minimalist(Brightness.light)
-      : standard(Brightness.light);
+  static ThemeData light(AppSettings s) => _density(
+      s,
+      s.minimalist
+          ? minimalist(Brightness.light)
+          : standard(Brightness.light));
 
-  static ThemeData dark(AppSettings s) => s.minimalist
-      ? minimalist(Brightness.dark)
-      : standard(Brightness.dark);
+  static ThemeData dark(AppSettings s) => _density(
+      s,
+      s.minimalist
+          ? minimalist(Brightness.dark)
+          : standard(Brightness.dark));
+
+  /// Compact mode ([AppSettings.compact]): the compact visual density
+  /// tightens list tiles, buttons, chips, inputs and icon buttons on every
+  /// screen; Material keeps their tap targets at 48 dp.
+  static ThemeData _density(AppSettings s, ThemeData theme) => s.compact
+      ? theme.copyWith(visualDensity: VisualDensity.compact)
+      : theme;
 
   /// Material 3 theme seeded from [AppConfig.seedColor], keeping the exact seed
   /// as the primary so the brand colour never drifts.

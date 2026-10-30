@@ -147,8 +147,12 @@ APK).
   uninstall) with the whole documents folder (`collages/` incl. draft,
   history, thumbs, photo copies; `settings.json`; startup times), support
   and external folders, and SharedPreferences. Settings › Backup & data shows
-  `FullBackupTiles`; `CollageAppState` calls `offerRestore` once after the
-  first frame, and before every update (`beforeInstall`). Android only.
+  `FullBackupTiles` (Back up everything, Restore, Backup location,
+  Automatic backup Off/Daily/Weekly, Last backup; `AppUpdates.backupStrings`
+  for the app's date/time format); `CollageAppState` calls `offerRestore`
+  once after the first frame plus `startSchedule()` (the automatic backup,
+  also on every resume), and one runs before every update (`beforeInstall`).
+  Android only.
   Android: nothing in the app (`MainActivity` is a plain FlutterActivity);
   the plugin brings `REQUEST_INSTALL_PACKAGES`, its install receiver and the
   `mfficiency_updates` channel. Builds must keep the same signing key (the
@@ -171,13 +175,24 @@ APK).
   `AppUpdates.collectLogs` (the last 20 launches from the startup history,
   then the in-memory App Logs of `LogService`, oldest first). Its token
   (fine-grained, Issues: Read and write) is in the same secure storage as the
-  updates token (`AppUpdates.problemReportTokenKey`); Settings › Updates ›
-  Problem reports to Claude (`ProblemReportSettingsTile`) explains it.
+  updates token (`AppUpdates.problemReportTokenKey`); Settings › Debugging ›
+  Send a report (`ProblemReportSendTile`) opens the same sheet and
+  Debugging › GitHub token (`ProblemReportSettingsTile`) explains the token.
   Without a token the report opens GitHub's new-issue page in the browser.
   Once per repo (by hand, on GitHub): the Actions secret
   `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, Claude Pro/Max) or
   `ANTHROPIC_API_KEY`, and the Claude GitHub app installed on the repo.
   Tests: `test/problem_report_test.dart`.
+- Settings (`settings_page.dart`): the same sections and rows as every
+  Mfficiency app (the template's docs/CONCEPT.md §5, the package README's
+  "Settings rows"): Appearance (Theme · Compact mode · Time format · Date
+  format · Minimalist mode) · Collage · Debugging (Send a report · GitHub
+  token) · Updates (Automatically check · Check for updates ·
+  `UpdateTokenTile`, saved via `AppUpdates.writeToken` under `tokenKey`) ·
+  Backup & data (the five full-backup rows, then the JSON Export
+  everything / Export settings / Import). Compact mode is
+  `AppSettings.compact` → `VisualDensity.compact` in `AppTheme`.
+  `test/settings_page_test.dart` pins the order.
 - Other apps (package 1.8.0, README.md › Other apps): the last row of About
   (`about_page.dart`, a Card with `OtherAppsLink`) opens the package's
   `OtherAppsPage` with every other Mfficiency app (`mfficiencyApps`;

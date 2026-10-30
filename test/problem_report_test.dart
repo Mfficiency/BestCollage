@@ -42,7 +42,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
-    final expand = find.byTooltip('Expand Updates');
+    final expand = find.byTooltip('Expand Debugging');
     await tester.ensureVisible(expand);
     await tester.pumpAndSettle();
     await tester.tap(expand);
@@ -51,7 +51,9 @@ void main() {
     final tile = find.byKey(const Key('problemReport.settings'));
     await tester.ensureVisible(tile);
     await tester.pumpAndSettle();
-    expect(find.text('Problem reports to Claude'), findsOneWidget);
+    expect(
+        find.descendant(of: tile, matching: find.text('GitHub token')),
+        findsOneWidget);
     await tester.tap(tile);
     await tester.pumpAndSettle();
     expect(find.textContaining('Issues: "Read and write"'), findsOneWidget);

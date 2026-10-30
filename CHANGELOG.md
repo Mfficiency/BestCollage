@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.20] - 2026-10-30
+- Settings: the same sections and rows as every Mfficiency app. Appearance starts with Theme, Compact mode (new: tighter spacing on every screen), Time format (24-hour or 12-hour) and Date format; Debugging, Updates and Backup & data come last. Debugging has Send a report (to Claude) and its GitHub token; Updates has Automatically check, Check for updates and the GitHub token (a token you saved before keeps working; it is now saved as you type and checked at once); Backup & data has Back up everything, Restore from a backup, Backup location, Automatic backup (Off / Daily / Weekly, weekly by default) and Last backup, then Export and Import. Updates package 1.9.0
+
 ## [0.4.19] - 2026-10-30
 - About › Other apps (at the bottom): every other Mfficiency app — BestToDo, Best Music, BestFloory, Hally Remote and more — with whether it's installed and its newest version; Install, Update or Open it straight from there (the download runs silently, then Android asks to install). Private apps need a GitHub token with Contents: Read-only (the page's key icon, or the problem-report token). Updates package 1.8.0
 
