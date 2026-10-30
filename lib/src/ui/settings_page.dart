@@ -98,7 +98,7 @@ class _SettingsPageState extends State<SettingsPage> {
       'token key pat github claude report issue',
     ),
     _SearchEntry(
-      'Automatically check for updates',
+      'Check automatically',
       5,
       'update upgrade new version install apk download',
     ),
@@ -442,13 +442,9 @@ class _SettingsPageState extends State<SettingsPage> {
     return _section(5, [
       SwitchListTile(
         secondary: const Icon(Icons.update),
-        title: const Text('Automatically check for updates'),
+        title: const Text('Check automatically'),
         subtitle: const Text(
-          'Checks for a newer version every 15 minutes while the app is '
-          'open and downloads it silently in the background; when it is '
-          'complete Android asks "Update this app?". Nothing installs '
-          'without your tap. Check for updates always works.',
-        ),
+            'Downloads new versions; Android asks before installing'),
         value: _s.autoUpdateCheckEnabled,
         onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
       ),

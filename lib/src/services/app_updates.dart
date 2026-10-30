@@ -51,7 +51,7 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 ///   public; with one the package (1.6.3+) already downloads through the
 ///   asset API, so the app keeps updating if the repo turns private.
 ///   [privateRepo] stays false (true without a token stops updates);
-/// * the "Automatically check for updates" switch ([AppSettings]) as
+/// * the "Check automatically" switch ([AppSettings]) as
 ///   [UpdateConfig.autoCheck] / [UpdateConfig.autoCheckChanges];
 /// * links opened with url_launcher (the Windows desktop too);
 /// * the app's preferences, date formats and log;
