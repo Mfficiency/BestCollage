@@ -18,6 +18,7 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
         FullBackup,
         FullBackupStrings,
         FullBackupTiles,
+        GithubTokenDialog,
         OtherAppsController,
         OtherAppsLink,
         ProblemReporter,

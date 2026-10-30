@@ -77,6 +77,11 @@ class AppSettings extends ChangeNotifier {
   /// and install a newer build from any channel (Android only).
   bool autoUpdateCheckEnabled = true;
 
+  // --- Releases -------------------------------------------------------------
+  /// After an update, show the changelog entries since the version the user
+  /// had before, once (Settings › Releases; on by default).
+  bool whatsNew = true;
+
   // --- Notifications --------------------------------------------------------
   bool notificationsEnabled = false;
   int notificationDelaySeconds = AppConfig.defaultNotificationDelaySeconds;
@@ -141,6 +146,7 @@ class AppSettings extends ChangeNotifier {
           for (final e in saveMillis.entries) '${e.key}': e.value,
         },
         'autoUpdateCheckEnabled': autoUpdateCheckEnabled,
+        'whatsNew': whatsNew,
       };
 
   /// Applies a settings map tolerantly: unknown/missing keys keep the current
@@ -184,6 +190,7 @@ class AppSettings extends ChangeNotifier {
         data['dateStampByDefault'] as bool? ?? dateStampByDefault;
     autoUpdateCheckEnabled =
         data['autoUpdateCheckEnabled'] as bool? ?? autoUpdateCheckEnabled;
+    whatsNew = data['whatsNew'] as bool? ?? whatsNew;
     final save = data['saveMillis'];
     if (save is Map) {
       saveMillis = {
@@ -211,5 +218,6 @@ class AppSettings extends ChangeNotifier {
     dateStampByDefault = false;
     saveMillis = {};
     autoUpdateCheckEnabled = true;
+    whatsNew = true;
   }
 }

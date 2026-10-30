@@ -8,6 +8,7 @@ import 'app_settings.dart';
 import 'services/app_updates.dart';
 import 'theme/app_theme.dart';
 import 'ui/intro_page.dart';
+import 'ui/whats_new.dart';
 import 'collage/collage_page.dart';
 
 /// Root widget. Rebuilds the [MaterialApp] theme whenever [AppSettings] changes
@@ -85,6 +86,9 @@ class CollageAppState extends State<CollageApp> {
     if (_updatesStarted || _showIntro || !mounted || context == null) return;
     _updatesStarted = true;
     AppUpdates.instance.controller.start(context);
+    // After an update, once: the changelog entries since the version the
+    // user had before (Settings › Releases turns it off).
+    unawaited(maybeShowWhatsNew(context));
   }
 
   Future<void> _finishIntro() async {
