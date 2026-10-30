@@ -17,6 +17,8 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
     show
         FullBackup,
         FullBackupTiles,
+        OtherAppsController,
+        OtherAppsLink,
         ProblemReporter,
         ProblemReportSettingsTile,
         ProblemReportTrigger,
@@ -59,9 +61,13 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 /// * "Report a problem to Claude" ([problemReport]): a double tap on the
 ///   version in the drawer sends a description and the app's logs as a
 ///   GitHub issue in [repo], which `.github/workflows/claude-fix.yml` hands
-///   to Claude (the package's README.md › Problem reports to Claude).
+///   to Claude (the package's README.md › Problem reports to Claude);
+/// * About › Other apps ([otherApps]): the other Mfficiency apps, installed
+///   from here (the package's README.md › Other apps), through the same
+///   GitHub requests and links as the updater.
 class AppUpdates {
-  AppUpdates._(this.controller, this.backup, this._tokens, this.problemReport);
+  AppUpdates._(this.controller, this.backup, this._tokens, this.problemReport,
+      this.otherApps);
 
   /// The app's updates. [init] sets it in `main`; until then (widget tests
   /// that build a page alone) an in-memory one that never checks by itself.
@@ -77,6 +83,10 @@ class AppUpdates {
   }
 
   static const String repo = 'Mfficiency/BestCollage';
+
+  /// The Android applicationId (one app on every channel); About › Other
+  /// apps leaves it out, also where Android can't be asked (desktop, tests).
+  static const String appId = 'com.mfficiency.best_collage';
   static const Duration interval = Duration(minutes: 15);
 
   /// Stays false: true makes checks require a token, so updates would stop
@@ -102,6 +112,12 @@ class AppUpdates {
   /// Updates › Problem reports to Claude explains and holds the token).
   /// Logs: [collectLogs]; links open through url_launcher.
   final ProblemReporter problemReport;
+
+  /// About › Other apps: every other Mfficiency app, installed or not, its
+  /// newest release and Install / Update / Open (the running app is left
+  /// out). Private apps are read with the problem-report token when it can
+  /// read them, or with the page's own token (its key icon).
+  final OtherAppsController otherApps;
 
   /// A token is saved (and sent with every GitHub request).
   bool get hasToken => controller.hasToken;
@@ -221,8 +237,15 @@ class AppUpdates {
           : tokenStore.write(problemReportTokenKey, token),
       openUrl: _openUrl,
     );
-    return updates =
-        AppUpdates._(controller, backup, tokenStore, problemReport);
+    final otherApps = OtherAppsController(
+      currentAppId: appId,
+      http: http,
+      platform: updatePlatform,
+      fallbackToken: problemReport.token,
+      userAgent: 'BestCollage-other-apps',
+    );
+    return updates = AppUpdates._(
+        controller, backup, tokenStore, problemReport, otherApps);
   }
 
   /// The logs a problem report carries, oldest first, newest last: the

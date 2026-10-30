@@ -178,6 +178,17 @@ APK).
   `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, Claude Pro/Max) or
   `ANTHROPIC_API_KEY`, and the Claude GitHub app installed on the repo.
   Tests: `test/problem_report_test.dart`.
+- Other apps (package 1.8.0, README.md › Other apps): the last row of About
+  (`about_page.dart`, a Card with `OtherAppsLink`) opens the package's
+  `OtherAppsPage` with every other Mfficiency app (`mfficiencyApps`;
+  BestCollage itself left out via `AppUpdates.appId`): installed or not, its
+  newest release, Install (silent download, then Android's installer) /
+  Update / Open, or Open on GitHub. `AppUpdates.otherApps` is the one
+  `OtherAppsController`, built in `AppUpdates.create` with the updater's
+  `http` and `UpdatePlatform` (url_launcher) and `fallbackToken:
+  problemReport.token`; private apps need a token with Contents: Read-only
+  (the page's key icon, prefs `other_apps.github_token`, or the
+  problem-report token). Tests: `test/about_page_test.dart`.
 
 ## Conventions
 

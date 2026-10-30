@@ -24,6 +24,11 @@ Logs, Startup Times, Test Results).
   the app; without one it opens on GitHub in the browser. One-time setup on
   GitHub: the Actions secret `CLAUDE_CODE_OAUTH_TOKEN` (`claude
   setup-token`) or `ANTHROPIC_API_KEY`, and the Claude GitHub app installed.
+- Other apps: the last row of About lists the other Mfficiency apps
+  (installed or not, newest release) with Install / Update / Open; Install
+  downloads silently and hands the APK to Android's installer. Private apps
+  need a GitHub token with Contents: Read-only (the page's key icon, or the
+  problem-report token); without one they open on GitHub.
 
 ## Develop
 

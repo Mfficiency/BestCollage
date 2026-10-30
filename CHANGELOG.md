@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.4.19] - 2026-10-30
+- About › Other apps (at the bottom): every other Mfficiency app — BestToDo, Best Music, BestFloory, Hally Remote and more — with whether it's installed and its newest version; Install, Update or Open it straight from there (the download runs silently, then Android asks to install). Private apps need a GitHub token with Contents: Read-only (the page's key icon, or the problem-report token). Updates package 1.8.0
+
 ## [0.4.18] - 2026-10-29
 - Report a problem to Claude: double-tap the version at the top of the menu, describe what went wrong and send it with the app's logs; Claude fixes it and the fix arrives as the next update. Settings › Updates › Problem reports to Claude explains the GitHub token that sends reports straight from the app (without one the report opens on GitHub in the browser). Updates package 1.7.0
 
