@@ -2,6 +2,7 @@
 
 ## [0.4.21] - 2026-10-30
 - What's new: after an update a small sheet lists the changes since the version you had before, once (Settings › Releases › Show what's new after an update, on by default). Settings: Debugging, Updates and Backup & data hold only their standard rows; Export everything, Export settings and Import moved to a new Manage data section. Every GitHub token dialog (Debugging, Updates, About › Other apps) is now the same: the token field first (show and copy it), one short line, the steps folded under How to get a token, Close always visible; the rows say Token set / No token. Updates package 1.10.0
+- Updates › Check automatically: the same short title as in the other apps
 
 ## [0.4.20] - 2026-10-30
 - Settings: the same sections and rows as every Mfficiency app. Appearance starts with Theme, Compact mode (new: tighter spacing on every screen), Time format (24-hour or 12-hour) and Date format; Debugging, Updates and Backup & data come last. Debugging has Send a report (to Claude) and its GitHub token; Updates has Automatically check, Check for updates and the GitHub token (a token you saved before keeps working; it is now saved as you type and checked at once); Backup & data has Back up everything, Restore from a backup, Backup location, Automatic backup (Off / Daily / Weekly, weekly by default) and Last backup, then Export and Import. Updates package 1.9.0

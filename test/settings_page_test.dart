@@ -180,13 +180,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'automatic');
     await tester.pumpAndSettle();
-    expect(find.text('Automatically check for updates'), findsOneWidget);
+    expect(find.text('Check automatically'), findsOneWidget);
 
-    await tester.tap(find.text('Automatically check for updates'));
+    await tester.tap(find.text('Check automatically'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsNothing);
-    expect(
-        find.widgetWithText(SwitchListTile, 'Automatically check for updates'),
+    expect(find.widgetWithText(SwitchListTile, 'Check automatically'),
         findsOneWidget);
     // Only Updates opened.
     expect(find.text('Minimalist mode'), findsNothing);
@@ -231,7 +230,7 @@ void main() {
       // Exactly these rows, in this order, nothing else.
       'Debugging': ['Send a report', 'GitHub token'],
       'Updates': [
-        'Automatically check for updates',
+        'Check automatically',
         'Check for updates',
         'GitHub token',
       ],
