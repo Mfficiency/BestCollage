@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// "Report a problem to Claude": a double tap on the version in the drawer
-/// opens the report sheet; Settings › Updates holds the token and explains it.
+/// opens the report sheet; Settings › Debugging holds the token and explains it.
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -54,9 +54,20 @@ void main() {
     expect(
         find.descendant(of: tile, matching: find.text('GitHub token')),
         findsOneWidget);
+    expect(find.descendant(of: tile, matching: find.text('No token')),
+        findsOneWidget);
     await tester.tap(tile);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Issues: "Read and write"'), findsOneWidget);
+    // The package's one token dialog: the field first, show and copy,
+    // Close always there; the steps folded under "How to get a token".
+    expect(find.byType(GithubTokenDialog), findsOneWidget);
+    expect(find.byKey(const Key('githubToken.show')), findsOneWidget);
+    expect(find.byKey(const Key('githubToken.copy')), findsOneWidget);
+    expect(find.byKey(const Key('githubToken.close')), findsOneWidget);
+    expect(find.text('Create a token on GitHub'), findsNothing);
+    await tester.tap(find.byKey(const Key('githubToken.howTo')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Issues: "Read and write"'), findsWidgets);
     expect(find.text('Create a token on GitHub'), findsOneWidget);
   });
 

@@ -18,12 +18,13 @@ import 'widgets/spacing.dart';
 ///  * Foldable section cards ([SettingsSection]) with Collapse/Expand all.
 ///    Order and rows as in every Mfficiency app (the template's
 ///    docs/CONCEPT.md §5): Appearance first (Theme · Compact mode · Time
-///    format · Date format, then the app's own), the app's sections, then
-///    Debugging (Send a report · GitHub token), Updates (Check
+///    format · Date format, then the app's own), Collage, Releases (Show
+///    what's new after an update), Manage data (the JSON export / import),
+///    then Debugging (Send a report · GitHub token), Updates (Check
 ///    automatically · Check for updates · GitHub token) and Backup & data
 ///    (Back up everything · Restore from a backup · Backup location ·
-///    Automatic backup · Last backup, then the app's own) last. The shared
-///    rows are the updates package's tiles.
+///    Automatic backup · Last backup) last. Those three hold exactly those
+///    rows, the updates package's tiles.
 ///
 /// Every setting reads and writes [AppSettings]; saving notifies listeners so
 /// the theme updates instantly. Export/import use the versioned
@@ -50,6 +51,8 @@ class _SettingsPageState extends State<SettingsPage> {
   static const List<String> _sectionTitles = [
     'Appearance',
     'Collage',
+    'Releases',
+    'Manage data',
     'Debugging',
     'Updates',
     'Backup & data',
@@ -79,43 +82,49 @@ class _SettingsPageState extends State<SettingsPage> {
     ),
     _SearchEntry('Export size', 1, 'resolution pixels quality save picture'),
     _SearchEntry('Date stamp on new collages', 1, 'date taken show default'),
-    _SearchEntry('Send a report', 2, 'claude bug problem report issue logs fix'),
+    _SearchEntry(
+      "Show what's new after an update",
+      2,
+      'whats new changelog changes release notes popup update',
+    ),
+    _SearchEntry('Export everything', 3, 'backup save json data settings file'),
+    _SearchEntry('Export settings', 3, 'backup save json preferences'),
+    _SearchEntry('Import', 3, 'restore backup load json file'),
+    _SearchEntry(
+        'Send a report', 4, 'claude bug problem report issue logs fix'),
     _SearchEntry(
       'GitHub token (problem reports)',
-      2,
+      4,
       'token key pat github claude report issue',
     ),
     _SearchEntry(
       'Automatically check for updates',
-      3,
+      5,
       'update upgrade new version install apk download',
     ),
     _SearchEntry(
       'Check for updates',
-      3,
+      5,
       'update upgrade new version install apk download latest',
     ),
     _SearchEntry(
       'GitHub token (updates)',
-      3,
+      5,
       'token key private pat github access',
     ),
     _SearchEntry(
       'Back up everything',
-      4,
+      6,
       'backup full downloads photos collages reinstall uninstall',
     ),
     _SearchEntry(
       'Restore from a backup',
-      4,
+      6,
       'restore backup full downloads reinstall',
     ),
-    _SearchEntry('Backup location', 4, 'folder downloads where'),
-    _SearchEntry('Automatic backup', 4, 'schedule daily weekly off backup'),
-    _SearchEntry('Last backup', 4, 'when backup date'),
-    _SearchEntry('Export everything', 4, 'backup save json data settings file'),
-    _SearchEntry('Export settings', 4, 'backup save json preferences'),
-    _SearchEntry('Import', 4, 'restore backup load json file'),
+    _SearchEntry('Backup location', 6, 'folder downloads where'),
+    _SearchEntry('Automatic backup', 6, 'schedule daily weekly off backup'),
+    _SearchEntry('Last backup', 6, 'when backup date'),
   ];
 
   @override
@@ -383,9 +392,44 @@ class _SettingsPageState extends State<SettingsPage> {
       ]);
 
   /// Send a report (to Claude) · GitHub token (for the reports).
+  /// Show what's new after an update (on by default).
+  Widget _releasesSection() => _section(2, [
+        SwitchListTile(
+          secondary: const Icon(Icons.new_releases_outlined),
+          title: const Text("Show what's new after an update"),
+          subtitle: const Text('The changes since your last version, once'),
+          value: _s.whatsNew,
+          onChanged: (v) => _apply(() => _s.whatsNew = v),
+        ),
+      ]);
+
+  /// The app's own JSON export and import.
+  Widget _manageDataSection() => _section(3, [
+        ListTile(
+          leading: const Icon(Icons.file_download),
+          title: const Text('Export everything'),
+          subtitle: const Text(
+            'Settings and data as a JSON file in a folder you pick',
+          ),
+          onTap: () => _export(includeData: true),
+        ),
+        ListTile(
+          leading: const Icon(Icons.tune),
+          title: const Text('Export settings'),
+          subtitle: const Text('Only the settings, as a JSON file'),
+          onTap: () => _export(includeData: false),
+        ),
+        ListTile(
+          leading: const Icon(Icons.file_upload),
+          title: const Text('Import'),
+          subtitle: const Text('Settings and data from an exported JSON file'),
+          onTap: _import,
+        ),
+      ]);
+
   Widget _debuggingSection() {
     final reporter = AppUpdates.instance.problemReport;
-    return _section(2, [
+    return _section(4, [
       ProblemReportSendTile(reporter: reporter),
       ProblemReportSettingsTile(reporter: reporter),
     ]);
@@ -395,7 +439,7 @@ class _SettingsPageState extends State<SettingsPage> {
   /// the release repo, needed once it is private).
   Widget _updatesSection() {
     final updates = AppUpdates.instance;
-    return _section(3, [
+    return _section(5, [
       SwitchListTile(
         secondary: const Icon(Icons.update),
         title: const Text('Automatically check for updates'),
@@ -421,33 +465,12 @@ class _SettingsPageState extends State<SettingsPage> {
     ]);
   }
 
-  /// The full backup's five rows (Android only), then the app's own JSON
-  /// export and import.
-  Widget _dataSection() => _section(4, [
+  /// The full backup's five rows (Android only), nothing else.
+  Widget _dataSection() => _section(6, [
         // Everything (collages, photo copies, settings) as one file in
         // Download/BestCollage/Backups, kept when the app is uninstalled.
         if (AppUpdates.instance.backup case final backup?)
           FullBackupTiles(backup: backup, strings: AppUpdates.backupStrings),
-        ListTile(
-          leading: const Icon(Icons.file_download),
-          title: const Text('Export everything'),
-          subtitle: const Text(
-            'Settings and data as a JSON file in a folder you pick',
-          ),
-          onTap: () => _export(includeData: true),
-        ),
-        ListTile(
-          leading: const Icon(Icons.tune),
-          title: const Text('Export settings'),
-          subtitle: const Text('Only the settings, as a JSON file'),
-          onTap: () => _export(includeData: false),
-        ),
-        ListTile(
-          leading: const Icon(Icons.file_upload),
-          title: const Text('Import'),
-          subtitle: const Text('Settings and data from an exported JSON file'),
-          onTap: _import,
-        ),
       ]);
 
   Widget _buildSearchField() => TextField(
@@ -572,6 +595,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             _appearanceSection(),
                             _collageSection(),
+                            _releasesSection(),
+                            _manageDataSection(),
                             _debuggingSection(),
                             _updatesSection(),
                             _dataSection(),

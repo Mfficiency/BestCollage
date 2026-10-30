@@ -186,13 +186,24 @@ APK).
 - Settings (`settings_page.dart`): the same sections and rows as every
   Mfficiency app (the template's docs/CONCEPT.md §5, the package README's
   "Settings rows"): Appearance (Theme · Compact mode · Time format · Date
-  format · Minimalist mode) · Collage · Debugging (Send a report · GitHub
-  token) · Updates (Automatically check · Check for updates ·
-  `UpdateTokenTile`, saved via `AppUpdates.writeToken` under `tokenKey`) ·
-  Backup & data (the five full-backup rows, then the JSON Export
-  everything / Export settings / Import). Compact mode is
-  `AppSettings.compact` → `VisualDensity.compact` in `AppTheme`.
-  `test/settings_page_test.dart` pins the order.
+  format · Minimalist mode) · Collage · Releases (Show what's new after an
+  update) · Manage data (the JSON Export everything / Export settings /
+  Import) · Debugging (Send a report · GitHub token) · Updates
+  (Automatically check · Check for updates · `UpdateTokenTile`, saved via
+  `AppUpdates.writeToken` under `tokenKey`) · Backup & data (the five
+  full-backup rows). Debugging, Updates and Backup & data hold exactly
+  those rows; any other row goes into another section. Every GitHub token
+  dialog (Debugging, Updates, About › Other apps) is the package's
+  `GithubTokenDialog` (1.10.0). Compact mode is `AppSettings.compact` →
+  `VisualDensity.compact` in `AppTheme`. `test/settings_page_test.dart`
+  pins the order.
+- What's new (`lib/src/ui/whats_new.dart`): `CollageAppState._startUpdates`
+  (after the first frame and the intro) calls `maybeShowWhatsNew`, which
+  compares the version in prefs `whats_new.last_version` with the running
+  one, saves the running one, and after an update shows `WhatsNewSheet`
+  with the CHANGELOG.md entries since then (`releasesSince`), once. A new
+  install shows nothing. `AppSettings.whatsNew` (Settings › Releases, on by
+  default) turns it off. Tests: `test/whats_new_test.dart`.
 - Other apps (package 1.8.0, README.md › Other apps): the last row of About
   (`about_page.dart`, a Card with `OtherAppsLink`) opens the package's
   `OtherAppsPage` with every other Mfficiency app (`mfficiencyApps`;

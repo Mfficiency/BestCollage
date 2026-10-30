@@ -17,8 +17,8 @@ void main() {
   /// The titles of every row, top to bottom, under each section header.
   Map<String, List<String>> rowsBySection(WidgetTester tester) {
     final out = <String, List<String>>{};
-    for (final section in tester.widgetList<SettingsSection>(
-        find.byType(SettingsSection))) {
+    for (final section
+        in tester.widgetList<SettingsSection>(find.byType(SettingsSection))) {
       final tiles = find.descendant(
         of: find.byWidget(section),
         // A SwitchListTile draws a ListTile too.
@@ -45,6 +45,8 @@ void main() {
     for (final title in const [
       'Appearance',
       'Collage',
+      'Releases',
+      'Manage data',
       'Debugging',
       'Updates',
       'Backup & data'
@@ -105,6 +107,10 @@ void main() {
   testWidgets(
       'sections: Appearance first; Debugging, Updates, Backup & data last',
       (tester) async {
+    // Wide enough for every chip (the chip row builds the visible ones).
+    tester.view.physicalSize = const Size(2400, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
 
@@ -112,8 +118,15 @@ void main() {
         .widgetList<ChoiceChip>(find.byType(ChoiceChip))
         .map((c) => (c.label as Text).data)
         .toList();
-    expect(chips,
-        ['Appearance', 'Collage', 'Debugging', 'Updates', 'Backup & data']);
+    expect(chips, [
+      'Appearance',
+      'Collage',
+      'Releases',
+      'Manage data',
+      'Debugging',
+      'Updates',
+      'Backup & data',
+    ]);
 
     // The cards are in the same order as the chips.
     final cardTops = [
@@ -153,8 +166,8 @@ void main() {
     // Opening Settings again starts collapsed again.
     await tester.tap(find.byTooltip('Expand Appearance'));
     await tester.pumpAndSettle();
-    await tester.pumpWidget(const MaterialApp(
-        home: SettingsPage(key: ValueKey('reopened'))));
+    await tester.pumpWidget(
+        const MaterialApp(home: SettingsPage(key: ValueKey('reopened'))));
     await tester.pumpAndSettle();
     expect(find.text('Minimalist mode'), findsNothing);
   });
@@ -213,6 +226,9 @@ void main() {
         'Minimalist mode',
       ],
       'Collage': ['Export size', 'Date stamp on new collages'],
+      'Releases': ["Show what's new after an update"],
+      'Manage data': ['Export everything', 'Export settings', 'Import'],
+      // Exactly these rows, in this order, nothing else.
       'Debugging': ['Send a report', 'GitHub token'],
       'Updates': [
         'Automatically check for updates',
@@ -225,14 +241,52 @@ void main() {
         'Backup location',
         'Automatic backup',
         'Last backup',
-        'Export everything',
-        'Export settings',
-        'Import',
       ],
     });
     // Theme (dark mode) is the first row of Appearance (a segmented row).
     final theme = tester.getTopLeft(find.text('Theme')).dy;
     expect(theme, lessThan(tester.getTopLeft(find.text('Compact mode')).dy));
+  });
+
+  testWidgets("Show what's new is on by default and can be turned off",
+      (tester) async {
+    expect(AppSettings.instance.whatsNew, isTrue);
+    await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand Releases'));
+    await tester.pumpAndSettle();
+
+    final row =
+        find.widgetWithText(SwitchListTile, "Show what's new after an update");
+    expect(tester.widget<SwitchListTile>(row).value, isTrue);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(AppSettings.instance.whatsNew, isFalse);
+    expect(AppSettings.instance.toMap()['whatsNew'], isFalse);
+  });
+
+  testWidgets('Updates › GitHub token: the row says No token / Token set',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Expand all'));
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(const Key('updates.token'));
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: row, matching: find.text('No token')),
+        findsOneWidget);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.byType(GithubTokenDialog), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const Key('updates.token.field')), 'github_pat_x');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.byKey(const Key('githubToken.close')));
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: row, matching: find.text('Token set')),
+        findsOneWidget);
   });
 
   testWidgets('compact mode and time format work app-wide', (tester) async {
