@@ -10,6 +10,7 @@ import 'theme/app_theme.dart';
 import 'ui/intro_page.dart';
 import 'ui/whats_new.dart';
 import 'collage/collage_page.dart';
+import 'ui/widgets/system_bar_safe_area.dart';
 
 /// Root widget. Rebuilds the [MaterialApp] theme whenever [AppSettings] changes
 /// (it listens to the singleton [ChangeNotifier]), shows the first-run intro,
@@ -116,6 +117,8 @@ class CollageAppState extends State<CollageApp> {
       theme: AppTheme.light(_settings),
       darkTheme: AppTheme.dark(_settings),
       themeMode: _settings.materialThemeMode,
+      // Every screen, sheet and dialog stays clear of Android's navigation bar.
+      builder: (context, child) => SystemBarSafeArea(child: child!),
       home: _showIntro
           ? IntroPage(onFinished: _finishIntro)
           : const CollagePage(),
