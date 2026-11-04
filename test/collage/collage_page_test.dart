@@ -67,6 +67,27 @@ void main() {
     expect(c.shape.label, '4:5');
   });
 
+  testWidgets('a white frame shrinks the photos instead of covering them',
+      (tester) async {
+    final c = await pumpPage(tester, photos: 1);
+    final cell = find.byType(PhotoCell);
+    final before = tester.getRect(cell);
+
+    c.frame = 20;
+    c.changed();
+    await tester.pumpAndSettle();
+    final after = tester.getRect(cell);
+    expect(after.width, closeTo(before.width - 40, 0.01));
+    expect(after.height, closeTo(before.height - 40, 0.01));
+    expect(after.center, before.center);
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Container &&
+            w.color == CollageController.frameColor &&
+            w.padding == const EdgeInsets.all(20)),
+        findsOneWidget);
+  });
+
   testWidgets('photo tool rotates and zooms the selected photo',
       (tester) async {
     final c = await pumpPage(tester, photos: 2);

@@ -1,5 +1,95 @@
 # Changelog
 
+## 1.10.0 - 2026-10-30
+
+- **One GitHub token dialog** (`GithubTokenDialog`, `GithubTokenStrings`)
+  for problem reports, updates and other apps: the field first with show
+  and copy buttons, one short line (`summary`) under it, the full steps
+  folded under "How to get a token"; Close always visible; saved as typed.
+- Token rows say only "Token set" / "No token".
+- Breaking: `ProblemReportStrings` and `OtherAppsStrings` lose
+  `createToken`, `removeToken` and `close` (now in `tokenDialog`) and gain
+  `setupSummary` / `tokenSummary`; `UpdateTokenStrings` loses
+  `createToken`, `removeToken`, `close` (now `dialog`) and its `summary`
+  takes the repo.
+
+## 1.9.0 - 2026-10-30
+
+- **The same settings rows in every app** (README.md › Settings rows):
+  `ProblemReportSendTile` (Debugging › Send a report), `UpdateTokenTile`
+  (Updates › GitHub token, saved as typed, checked at once), and the full
+  backup split into `FullBackupNowTile`, `FullBackupRestoreTile`,
+  `FullBackupLocationTile`, `FullBackupScheduleTile`, `FullBackupLastTile`
+  (`FullBackupTiles` is now those five in that order).
+- **Automatic full backups:** `FullBackup.schedule` (off, daily, weekly;
+  `FullBackupConfig.defaultSchedule`, weekly), `setSchedule`,
+  `backupIfDue()` and `startSchedule()` (after the first frame and on every
+  resume).
+- `ProblemReportSettingsTile` is titled "GitHub token" (key icon).
+- Fix: on Windows an interrupted download started over (its `.part` was
+  deleted: paths compared with mixed separators).
+- Breaking: `FullBackupStrings.lastBackup` is gone (the Last backup row uses
+  `lastTitle`, `lastNever` and `dateTime`); `backupSubtitle` no longer
+  names the folder (the Backup location row does).
+
+## 1.8.0 - 2026-10-30
+
+- **Other apps:** `OtherAppsLink` (the row at the bottom of About) opens
+  `OtherAppsPage`: every other Mfficiency Android app (`mfficiencyApps`,
+  this one left out) with whether it is installed, its newest release
+  (highest build of any channel, its own tag scheme) and Install / Update /
+  Open. The download is silent like an update's (own folder
+  `<cache>/other_apps`, then moved to `<cache>/updates` for the
+  installer), then Android asks. Private repos need a token with Contents:
+  Read-only (the page's key icon, or the app's `fallbackToken`, e.g. the
+  problem-report token); without one, or off a phone, Open on GitHub.
+  Native: `packageInfo`, `launchApp`; the manifest's `<queries>` lists the
+  apps. `OtherAppsStrings` (English defaults).
+- The problem-report token help mentions adding Contents: Read-only so one
+  token serves both.
+
+## 1.7.0 - 2026-10-29
+
+- **Problem reports to Claude:** `ProblemReporter` sends the user's
+  description, the app's facts and its logs as a GitHub issue labelled
+  `claude-fix` (body marked `<!-- mfficiency-problem-report -->`), which
+  the repo's `claude-fix.yml` workflow hands to Claude to fix and merge
+  into dev. With a fine-grained token (Issues: read and write) straight
+  from the app; without one GitHub's new-issue page opens filled in.
+  `ProblemReportTrigger` (double tap on the version in the menu),
+  `showProblemReport` (the sheet), `ProblemReportSettingsTile` (the token
+  and how to get it), `ProblemReportStrings` (English defaults).
+
+## 1.6.3 - 2026-10-24
+
+- A public repo with a token downloads through the asset API too, so an
+  app with a token keeps updating when its repo turns private.
+
+## 1.6.2 - 2026-10-23
+
+- The new-install check skips `excluded` folders again (1.6.1 compared
+  paths wrongly, so e.g. an early log made an install look used).
+
+## 1.6.1 - 2026-10-23
+
+- A new install is one with no SharedPreferences **and** no file in the
+  app's folders (apps that keep everything in files no longer offer a
+  restore after an update).
+- The restore confirmation no longer claims every token stays out: only
+  those the app keeps in secure storage do.
+
+## 1.6.0 - 2026-10-23
+
+- **Full backup:** `FullBackup` writes everything the app keeps (its
+  documents, support and external folders, SharedPreferences, `extras`)
+  to one `.tar.gz` in `Download/<appName>/Backups/`, which survives
+  uninstalling; `beforeUpdate` for `beforeInstall` makes one before every
+  update. Restore picks a file, checks the applicationId, backs up the
+  current data first and restarts the app. `FullBackupTiles` for
+  Settings, `offerRestore` once on a new install, `FullBackupStrings`
+  (English defaults). Native: `appId`, `saveToDownloads` (MediaStore),
+  `pickFile`, `restartApp`; `WRITE_EXTERNAL_STORAGE` up to Android 9 only.
+
 ## 1.5.0 - 2026-10-15
 
 - **Build facts per version:** `ReleaseBuildInfo(controller:, version:)`

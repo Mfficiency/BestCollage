@@ -1,5 +1,16 @@
 # CLAUDE.md — AI working guide for BestCollage
 
+## Every request ends on `dev` (standing rule from the owner)
+
+Any request that changes files is finished only when the work is **merged into
+`dev` and pushed**, without being asked: commit on the working branch, merge
+`origin/dev` into it (resolve conflicts, keep both sides' intent), run the repo's
+checks, then merge the branch into `dev` and `git push origin dev`. Report the
+`dev` commit. `staging`/`main` only when the request says so. If the merge or
+push can't be done, say exactly why. `.claude/hooks/require-merged-to-dev.sh` (a Stop
+hook in `.claude/settings.json`) blocks stopping while commits or tracked changes
+are not on `dev`.
+
 Flutter collage app (1–4 photos → one picture). Android-first; Windows desktop
 for tests. Built from the BestToDo app template
 (`D:\Code\best_todo_2\template\app_template`) — same theme, drawer and
@@ -88,7 +99,11 @@ APK).
   template's copy and run its `tool/sync_updates_package.sh <this folder>`;
   `test/updates_package_vendored_test.dart` fails on a hand edit; its
   README.md describes the flow). It reads the GitHub releases of
-  Mfficiency/BestCollage (public, no token; tag prefix `v`, every channel,
+  Mfficiency/BestCollage (public; an optional token from Settings ›
+  Updates › GitHub token lives in flutter_secure_storage (`AppUpdates.
+  tokenKey`, never prefs/logs/backups) and switches downloads to the asset
+  API, so it keeps updating if the repo turns private — `privateRepo` stays
+  false; tag prefix `v`, every channel,
   prereleases included, drafts not) and offers the highest build number
   above the installed versionCode (x.y.z doesn't matter). A newer build
   downloads **silently** into the cache (`.part`, resumed, reused after a
@@ -123,8 +138,21 @@ APK).
   SharedPreferences store, date formats, log, and the update state of 0.4.5
   and older carried over once (`migrateLegacyState` → the package's
   `migrateLegacyUpdateState` with the app's own key parsing; it also deletes
-  the old `<external files>/updates`). No pre-install hook, no prompt gate
+  the old `<external files>/updates`). No pre-install hook yet, no prompt gate
   (updates only start after the intro).
+  Full backup: `AppUpdates.backup` is the package's `FullBackup`
+  (appName `BestCollage`, `keep: 4` — the photo copies make backups big;
+  `backup.init()` runs first in `AppUpdates.init`, before anything writes
+  prefs). It writes `Download/BestCollage/Backups/*.tar.gz` (kept on
+  uninstall) with the whole documents folder (`collages/` incl. draft,
+  history, thumbs, photo copies; `settings.json`; startup times), support
+  and external folders, and SharedPreferences. Settings › Backup & data shows
+  `FullBackupTiles` (Back up everything, Restore, Backup location,
+  Automatic backup Off/Daily/Weekly, Last backup; `AppUpdates.backupStrings`
+  for the app's date/time format); `CollageAppState` calls `offerRestore`
+  once after the first frame plus `startSchedule()` (the automatic backup,
+  also on every resume), and one runs before every update (`beforeInstall`).
+  Android only.
   Android: nothing in the app (`MainActivity` is a plain FlutterActivity);
   the plugin brings `REQUEST_INSTALL_PACKAGES`, its install receiver and the
   `mfficiency_updates` channel. Builds must keep the same signing key (the
@@ -136,6 +164,57 @@ APK).
   (installs older than 0.4.1 read them); the channel builds go into its
   `<channel>/` subfolders. The updater reads neither — only the GitHub
   releases.
+- Report a problem to Claude (package 1.7.0, README.md › Problem reports to
+  Claude): a **double tap on the version** in the drawer header
+  (`app_drawer.dart`, `ProblemReportTrigger`) opens a sheet (description,
+  "Include the app's logs", Send to Claude). Send makes a GitHub issue in
+  Mfficiency/BestCollage (label `claude-fix`, marker
+  `<!-- mfficiency-problem-report -->`); `.github/workflows/claude-fix.yml`
+  has Claude fix it like any other request, merge into `dev`, push, and asks
+  the laptop to build it. `AppUpdates.problemReport` holds the config; logs =
+  `AppUpdates.collectLogs` (the last 20 launches from the startup history,
+  then the in-memory App Logs of `LogService`, oldest first). Its token
+  (fine-grained, Issues: Read and write) is in the same secure storage as the
+  updates token (`AppUpdates.problemReportTokenKey`); Settings › Debugging ›
+  Send a report (`ProblemReportSendTile`) opens the same sheet and
+  Debugging › GitHub token (`ProblemReportSettingsTile`) explains the token.
+  Without a token the report opens GitHub's new-issue page in the browser.
+  Once per repo (by hand, on GitHub): the Actions secret
+  `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, Claude Pro/Max) or
+  `ANTHROPIC_API_KEY`, and the Claude GitHub app installed on the repo.
+  Tests: `test/problem_report_test.dart`.
+- Settings (`settings_page.dart`): the same sections and rows as every
+  Mfficiency app (the template's docs/CONCEPT.md §5, the package README's
+  "Settings rows"): Appearance (Theme · Compact mode · Time format · Date
+  format · Minimalist mode) · Collage · Releases (Show what's new after an
+  update) · Manage data (the JSON Export everything / Export settings /
+  Import) · Debugging (Send a report · GitHub token) · Updates
+  (Automatically check · Check for updates · `UpdateTokenTile`, saved via
+  `AppUpdates.writeToken` under `tokenKey`) · Backup & data (the five
+  full-backup rows). Debugging, Updates and Backup & data hold exactly
+  those rows; any other row goes into another section. Every GitHub token
+  dialog (Debugging, Updates, About › Other apps) is the package's
+  `GithubTokenDialog` (1.10.0). Compact mode is `AppSettings.compact` →
+  `VisualDensity.compact` in `AppTheme`. `test/settings_page_test.dart`
+  pins the order.
+- What's new (`lib/src/ui/whats_new.dart`): `CollageAppState._startUpdates`
+  (after the first frame and the intro) calls `maybeShowWhatsNew`, which
+  compares the version in prefs `whats_new.last_version` with the running
+  one, saves the running one, and after an update shows `WhatsNewSheet`
+  with the CHANGELOG.md entries since then (`releasesSince`), once. A new
+  install shows nothing. `AppSettings.whatsNew` (Settings › Releases, on by
+  default) turns it off. Tests: `test/whats_new_test.dart`.
+- Other apps (package 1.8.0, README.md › Other apps): the last row of About
+  (`about_page.dart`, a Card with `OtherAppsLink`) opens the package's
+  `OtherAppsPage` with every other Mfficiency app (`mfficiencyApps`;
+  BestCollage itself left out via `AppUpdates.appId`): installed or not, its
+  newest release, Install (silent download, then Android's installer) /
+  Update / Open, or Open on GitHub. `AppUpdates.otherApps` is the one
+  `OtherAppsController`, built in `AppUpdates.create` with the updater's
+  `http` and `UpdatePlatform` (url_launcher) and `fallbackToken:
+  problemReport.token`; private apps need a token with Contents: Read-only
+  (the page's key icon, prefs `other_apps.github_token`, or the
+  problem-report token). Tests: `test/about_page_test.dart`.
 
 ## Conventions
 
