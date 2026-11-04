@@ -67,6 +67,27 @@ void main() {
     expect(c.shape.label, '4:5');
   });
 
+  testWidgets('a white frame shrinks the photos instead of covering them',
+      (tester) async {
+    final c = await pumpPage(tester, photos: 1);
+    final cell = find.byType(PhotoCell);
+    final before = tester.getRect(cell);
+
+    c.frame = 20;
+    c.changed();
+    await tester.pumpAndSettle();
+    final after = tester.getRect(cell);
+    expect(after.width, closeTo(before.width - 40, 0.01));
+    expect(after.height, closeTo(before.height - 40, 0.01));
+    expect(after.center, before.center);
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Container &&
+            w.color == CollageController.frameColor &&
+            w.padding == const EdgeInsets.all(20)),
+        findsOneWidget);
+  });
+
   testWidgets('photo tool rotates and zooms the selected photo',
       (tester) async {
     final c = await pumpPage(tester, photos: 2);
@@ -127,23 +148,39 @@ void main() {
 
     await tester.tap(find.text('Date'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Show date taken'));
-    await tester.pumpAndSettle();
-    expect(c.showDates, isTrue);
-    expect(find.text('01.05.24'), findsWidgets);
-    expect(find.text('24.12.23'), findsOneWidget);
+    expect(find.byKey(const Key('date-stamp-0')), findsNothing);
+    expect(find.byKey(const Key('date-stamp-1')), findsNothing);
 
-    // Hide it on the selected photo only.
-    await tester.tap(find.widgetWithText(SwitchListTile, '01.05.24'));
+    // Turning it on for the selected photo leaves the other one alone.
+    await tester.tap(find.byKey(const Key('photo-date-switch')));
+    await tester.pumpAndSettle();
+    expect(c.photos[0].showDate, isTrue);
+    expect(c.photos[1].showDate, isFalse);
+    expect(find.byKey(const Key('date-stamp-0')), findsOneWidget);
+    expect(find.byKey(const Key('date-stamp-1')), findsNothing);
+    expect(find.text('01.05.24'), findsWidgets);
+
+    // Then the second photo too, and off again on the first only.
+    c.selected = 1;
+    c.changed();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('photo-date-switch')));
+    await tester.pumpAndSettle();
+    expect(find.text('24.12.23'), findsOneWidget);
+    c.selected = 0;
+    c.changed();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('photo-date-switch')));
     await tester.pumpAndSettle();
     expect(c.photos[0].showDate, isFalse);
+    expect(c.photos[1].showDate, isTrue);
     expect(find.byKey(const Key('date-stamp-0')), findsNothing);
     expect(find.byKey(const Key('date-stamp-1')), findsOneWidget);
   });
 
   testWidgets('dragging a date stamp moves it', (tester) async {
     final c = await pumpPage(tester, photos: 1);
-    c.showDates = true;
+    c.photos[0].showDate = true;
     c.changed();
     await tester.pumpAndSettle();
     final before = c.photos[0].stamp.x;

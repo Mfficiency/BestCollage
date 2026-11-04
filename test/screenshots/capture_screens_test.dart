@@ -137,7 +137,7 @@ void main() {
 
     await tester.tap(find.text('Date'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Show date taken'));
+    await tester.tap(find.byKey(const Key('photo-date-switch')));
     await tester.pumpAndSettle();
     await capture('collage_date');
 

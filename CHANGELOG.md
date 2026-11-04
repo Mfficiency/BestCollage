@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.4.23] - 2026-11-04
+- Date: turn the date stamp on or off for each photo by itself — select a photo in Date and flip its switch; there is no longer one switch for all photos. The colour still applies to every date shown
+- Color: new Contrast slider, for the whole collage or just the selected photo
+
+## [0.4.22] - 2026-11-02
+- Every screen, menu, bottom sheet and dialog stays clear of Android's navigation bar: the app checks whether the bar is there and how tall it is (the slim gesture line or the Back/Home/Recents buttons, also on the side in landscape) and keeps every button and line of text above it; the strip behind the bar takes the page colour
+
+## [0.4.21] - 2026-10-30
+- What's new: after an update a small sheet lists the changes since the version you had before, once (Settings › Releases › Show what's new after an update, on by default). Settings: Debugging, Updates and Backup & data hold only their standard rows; Export everything, Export settings and Import moved to a new Manage data section. Every GitHub token dialog (Debugging, Updates, About › Other apps) is now the same: the token field first (show and copy it), one short line, the steps folded under How to get a token, Close always visible; the rows say Token set / No token. Updates package 1.10.0
+- Updates › Check automatically: the same short title as in the other apps
+
+## [0.4.20] - 2026-10-30
+- Settings: the same sections and rows as every Mfficiency app. Appearance starts with Theme, Compact mode (new: tighter spacing on every screen), Time format (24-hour or 12-hour) and Date format; Debugging, Updates and Backup & data come last. Debugging has Send a report (to Claude) and its GitHub token; Updates has Automatically check, Check for updates and the GitHub token (a token you saved before keeps working; it is now saved as you type and checked at once); Backup & data has Back up everything, Restore from a backup, Backup location, Automatic backup (Off / Daily / Weekly, weekly by default) and Last backup, then Export and Import. Updates package 1.9.0
+
+## [0.4.19] - 2026-10-30
+- About › Other apps (at the bottom): every other Mfficiency app — BestToDo, Best Music, BestFloory, Hally Remote and more — with whether it's installed and its newest version; Install, Update or Open it straight from there (the download runs silently, then Android asks to install). Private apps need a GitHub token with Contents: Read-only (the page's key icon, or the problem-report token). Updates package 1.8.0
+
+## [0.4.18] - 2026-10-29
+- Report a problem to Claude: double-tap the version at the top of the menu, describe what went wrong and send it with the app's logs; Claude fixes it and the fix arrives as the next update. Settings › Updates › Problem reports to Claude explains the GitHub token that sends reports straight from the app (without one the report opens on GitHub in the browser). Updates package 1.7.0
+
+## [0.4.17] - 2026-10-24
+- Settings: every section starts collapsed each time you open it; tap a section, its chip or a search result to open it
+
+## [0.4.16] - 2026-10-24
+- Settings: same layout as the other apps — Appearance first, Updates and Backup & data at the bottom, less space between sections; every section folds (Collapse all / Expand all)
+
+## [0.4.15] - 2026-10-24
+- Settings › Updates › GitHub token (optional): the token now lives in the phone's secure storage instead of the preferences (a token saved in 0.4.14 moves over by itself), never in logs or backups. With a token the app downloads updates through GitHub's API, so it keeps updating if the repo turns private; without one nothing changes (the shared update module is now 1.6.3)
+
+## [0.4.14] - 2026-10-24
+- Settings › Updates: a GitHub token field, ready for when the repo goes private (read-only access to BestCollage). It stays on this device and out of backups; not needed today.
+
+## [0.4.13] - 2026-10-23
+- Settings › Data: Back up everything saves all your collages (the draft, Previous collages and the photos in them), settings and startup times as one file in Download/BestCollage/Backups, which stays even if the app is uninstalled (the newest 4 are kept), and one is made automatically before every update. Restore from a backup brings it all back; a new install offers that once. Android only (the shared update module is now 1.6.0)
+
+## [0.4.12] - 2026-10-21
+- Border: a new Frame slider adds a white frame around the outside of the collage. The photos get smaller to make room for it, nothing is covered
+
 ## [0.4.11] - 2026-10-15
 - Changelog: every version shows when it was built, how long the build took and the size of its APK, taken from its GitHub release (the shared update module is now 1.5.0)
 

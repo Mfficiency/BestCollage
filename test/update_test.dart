@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:best_collage/best_collage.dart';
 import 'package:flutter/material.dart';
@@ -181,6 +182,90 @@ void main() {
           reason: 'public repo, no token');
     });
 
+    test('a saved GitHub token goes with every request, from secure storage',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final tokens = MemoryUpdateTokenStore();
+      final u = AppUpdates.create(
+        prefs: prefs,
+        tokens: tokens,
+        store: MemoryUpdateStore(),
+        http: github.http,
+        downloader: downloader,
+        platform: UpdatePlatform(supported: false),
+        clock: () => now,
+        firstCheckDelay: Duration.zero,
+      );
+      await u.controller.init();
+      AppUpdates.instance = u;
+      expect(u.controller.hasToken, isFalse);
+      expect(await u.readToken(), isNull);
+      expect(AppUpdates.privateRepo, isFalse,
+          reason: 'true without a token would stop updates');
+
+      await u.writeToken('  github_pat_abc  ');
+      await u.controller.reloadToken();
+      expect(tokens.values[AppUpdates.tokenKey], 'github_pat_abc');
+      expect(await u.readToken(), 'github_pat_abc');
+      expect(prefs.getKeys(), isNot(contains(AppUpdates.tokenKey)),
+          reason: 'never in plain preferences');
+      expect(u.controller.hasToken, isTrue);
+      expect(github.headers.last['Authorization'], 'Bearer github_pat_abc');
+      expect(u.backup!.config.excludedPrefixes,
+          {AppUpdates.tokenKey, AppUpdates.problemReportTokenKey});
+
+      github.status = 401;
+      await u.writeToken('github_pat_wrong');
+      expect((await u.controller.reloadToken()).status,
+          UpdateStatus.badToken);
+
+      github.status = 200;
+      await u.writeToken(null);
+      await u.controller.reloadToken();
+      expect(tokens.values, isEmpty);
+      expect(await u.readToken(), isNull);
+      expect(u.controller.hasToken, isFalse);
+      expect(github.headers.last.containsKey('Authorization'), isFalse);
+    });
+
+    test('a failing secure storage means no token, updates as before',
+        () async {
+      final u = AppUpdates.create(
+        tokens: _FailingTokens(),
+        store: MemoryUpdateStore(),
+        http: github.http,
+        downloader: downloader,
+        platform: UpdatePlatform(supported: false),
+        clock: () => now,
+        firstCheckDelay: Duration.zero,
+      );
+      await u.controller.init();
+      expect(await u.readToken(), isNull);
+      expect(u.controller.hasToken, isFalse);
+      expect((await u.controller.check()).status, UpdateStatus.available);
+      expect(github.headers.last.containsKey('Authorization'), isFalse);
+      u.controller.dispose();
+    });
+
+    test("0.4.14's token in the preferences moves to secure storage",
+        () async {
+      SharedPreferences.setMockInitialValues(
+          {AppUpdates.tokenKey: 'github_pat_old', 'other': 1});
+      final prefs = await SharedPreferences.getInstance();
+      final tokens = MemoryUpdateTokenStore();
+      await AppUpdates.migratePrefsToken(prefs, tokens);
+      expect(tokens.values, {AppUpdates.tokenKey: 'github_pat_old'});
+      expect(prefs.containsKey(AppUpdates.tokenKey), isFalse);
+      expect(prefs.getInt('other'), 1);
+
+      // One saved in secure storage already wins.
+      await prefs.setString(AppUpdates.tokenKey, 'github_pat_older');
+      await AppUpdates.migratePrefsToken(prefs, tokens);
+      expect(tokens.values, {AppUpdates.tokenKey: 'github_pat_old'});
+      expect(prefs.containsKey(AppUpdates.tokenKey), isFalse);
+    });
+
     test('other tag prefixes and drafts are not this app', () async {
       github.body = [
         release('9.0.0+99', prefix: 'music-v'),
@@ -195,6 +280,75 @@ void main() {
       github.body = [release('0.2.2+4'), release('0.4.0+3')];
       final u = await makeUpdates(phone: false);
       expect((await u.controller.check()).status, UpdateStatus.upToDate);
+    });
+  });
+
+  group('full backup', () {
+    test('BestCollage, 4 kept, the controller\'s platform, everything in',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final platform = UpdatePlatform(supported: true);
+      final u = AppUpdates.create(prefs: prefs, platform: platform);
+      final b = u.backup!;
+      expect(b.config.appName, 'BestCollage');
+      expect(b.folder, 'Download/BestCollage/Backups');
+      expect(b.config.keep, AppUpdates.keepBackups);
+      expect(AppUpdates.keepBackups, 4);
+      expect(b.config.excluded, isEmpty,
+          reason: 'collages/ (thumbs, photo copies) is all data');
+      expect(b.config.excludedPrefixes,
+          {AppUpdates.tokenKey, AppUpdates.problemReportTokenKey},
+          reason: 'the GitHub token stays out of Downloads');
+      expect(b.platform, same(platform));
+      expect(b.version, AppVersion.version);
+      expect(b.build, AppVersion.buildNumber);
+      u.controller.dispose();
+    });
+
+    test('a new install is noticed before anything writes prefs', () async {
+      // Since updates package 1.6.1 a new install has no files either.
+      final docs = Directory.systemTemp.createTempSync('collage_docs');
+      addTearDown(() => docs.deleteSync(recursive: true));
+      Future<Map<String, String>> roots() async => {'documents': docs.path};
+
+      SharedPreferences.setMockInitialValues({});
+      final fresh = await SharedPreferences.getInstance();
+      final a = AppUpdates.create(
+          prefs: fresh,
+          platform: UpdatePlatform(supported: true),
+          backupRoots: roots);
+      await a.backup!.init();
+      expect(a.backup!.looksFresh, isTrue);
+      a.controller.dispose();
+
+      SharedPreferences.setMockInitialValues({'intro_shown': true});
+      final used = await SharedPreferences.getInstance();
+      final b = AppUpdates.create(
+          prefs: used,
+          platform: UpdatePlatform(supported: true),
+          backupRoots: roots);
+      await b.backup!.init();
+      expect(b.backup!.looksFresh, isFalse);
+      b.controller.dispose();
+
+      // Collages but no preferences: used too.
+      File('${docs.path}/collages.json').writeAsStringSync('[]');
+      SharedPreferences.setMockInitialValues({});
+      final filesOnly = await SharedPreferences.getInstance();
+      final c = AppUpdates.create(
+          prefs: filesOnly,
+          platform: UpdatePlatform(supported: true),
+          backupRoots: roots);
+      await c.backup!.init();
+      expect(c.backup!.looksFresh, isFalse);
+      c.controller.dispose();
+    });
+
+    test('no preferences (widget tests): no backup', () {
+      final u = AppUpdates.create();
+      expect(u.backup, isNull);
+      u.controller.dispose();
     });
   });
 
@@ -714,4 +868,14 @@ void expectNothingPoppedUpIn(WidgetTester tester) {
   expect(find.byType(Dialog), findsNothing);
   expect(find.byType(AlertDialog), findsNothing);
   expect(find.byType(BottomSheet), findsNothing);
+}
+
+class _FailingTokens implements UpdateTokenStore {
+  @override
+  Future<String?> read(String key) => Future.error(StateError('no keystore'));
+  @override
+  Future<void> write(String key, String value) =>
+      Future.error(StateError('no keystore'));
+  @override
+  Future<void> delete(String key) => Future.error(StateError('no keystore'));
 }

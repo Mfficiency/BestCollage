@@ -15,6 +15,20 @@ Logs, Startup Times, Test Results).
   photos or one at a time.
 - Date-taken stamp (dd.mm.yy, from EXIF): toggle, drag, resize, recolour.
 - Save as a new PNG to the gallery album "BestCollage".
+- Report a problem to Claude: double-tap the version at the top of the menu,
+  describe it, send it with the app's logs. It becomes a GitHub issue here
+  (label `claude-fix`) that `.github/workflows/claude-fix.yml` hands to
+  Claude, which fixes it, merges into `dev` and pushes, so the fix ships as
+  the next update (or Settings › Debugging › Send a report). Settings ›
+  Debugging › GitHub token explains the GitHub token (fine-grained, Issues: Read and write) that sends it from
+  the app; without one it opens on GitHub in the browser. One-time setup on
+  GitHub: the Actions secret `CLAUDE_CODE_OAUTH_TOKEN` (`claude
+  setup-token`) or `ANTHROPIC_API_KEY`, and the Claude GitHub app installed.
+- Other apps: the last row of About lists the other Mfficiency apps
+  (installed or not, newest release) with Install / Update / Open; Install
+  downloads silently and hands the APK to Android's installer. Private apps
+  need a GitHub token with Contents: Read-only (the page's key icon, or the
+  problem-report token); without one they open on GitHub.
 
 ## Develop
 

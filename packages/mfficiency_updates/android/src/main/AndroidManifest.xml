@@ -3,12 +3,28 @@
          for the app once. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Full backups to Downloads on Android 9 and older (10+ uses
+         MediaStore, no permission). -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <!-- Finds Android's installer app (Android 11+ package visibility). -->
     <queries>
         <intent>
             <action android:name="android.intent.action.INSTALL_PACKAGE" />
             <data android:scheme="content" android:mimeType="application/vnd.android.package-archive" />
         </intent>
+        <!-- "Other apps" shows whether these are installed and opens them
+             (lib/src/other_apps.dart, mfficiencyApps). -->
+        <package android:name="com.mfficiency.best_todo_2" />
+        <package android:name="com.mfficiency.best_music" />
+        <package android:name="com.mfficiency.best_collage" />
+        <package android:name="ch.mfficiency.bestfloory" />
+        <package android:name="ch.mfficiency.hallyremote" />
+        <package android:name="com.mfficiency.vesta_immo" />
+        <package android:name="com.bestwatchfeatures" />
+        <package android:name="app.mostlygoodnews" />
     </queries>
 
     <application>

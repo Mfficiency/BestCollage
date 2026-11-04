@@ -319,6 +319,17 @@ class _LayoutPanel extends StatelessWidget {
           },
         ),
         _SliderRow(
+          label: 'Frame',
+          value: c.frame,
+          min: 0,
+          max: CollageController.maxFrame,
+          display: (v) => v.round().toString(),
+          onChanged: (v) {
+            c.frame = v;
+            c.changed();
+          },
+        ),
+        _SliderRow(
           label: 'Corners',
           value: c.cornerRadius,
           min: 0,
@@ -517,6 +528,14 @@ class _ColorPanel extends StatelessWidget {
           onChanged: (v) => update(() => a.brightness = v),
         ),
         _SliderRow(
+          label: 'Contrast',
+          value: a.contrast,
+          min: -1,
+          max: 1,
+          display: _signedPercent,
+          onChanged: (v) => update(() => a.contrast = v),
+        ),
+        _SliderRow(
           label: 'Warmth',
           value: a.warmth,
           min: -1,
@@ -633,21 +652,71 @@ class _DatePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = c.selectedPhoto;
+    final anyShown = c.photos.any((p) => p.showDate && p.takenAt != null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SwitchListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          title: const Text('Show date taken'),
-          subtitle: const Text('Stamped as dd.mm.yy'),
-          value: c.showDates,
-          onChanged: (v) {
-            c.showDates = v;
-            c.changed();
-          },
-        ),
-        if (c.showDates) ...[
-          const _Label('Colour'),
+        if (p == null)
+          const _SelectHint('Tap a photo to show or hide its date')
+        else ...[
+          _Label('Photo ${c.selected! + 1}'),
+          SwitchListTile(
+            key: const Key('photo-date-switch'),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            title: Text(p.takenAt == null
+                ? 'No date found'
+                : 'Show date · ${formatStampDate(p.takenAt!)}'),
+            subtitle: Text(p.takenAt == null
+                ? 'Set one with "Change date"'
+                : _sourceText(p)),
+            value: p.showDate && p.takenAt != null,
+            onChanged: p.takenAt == null
+                ? null
+                : (v) {
+                    p.showDate = v;
+                    c.changed();
+                  },
+          ),
+          if (p.showDate && p.takenAt != null)
+            _SliderRow(
+              label: 'Size',
+              value: p.stamp.size,
+              min: DateStampPlacement.minSize,
+              max: DateStampPlacement.maxSize,
+              display: (v) => '${(v * 1000).round()}',
+              onChanged: (v) {
+                p.stamp.size = v;
+                c.changed();
+              },
+            ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
+            children: [
+              TextButton.icon(
+                onPressed: () async {
+                  final hadDate = p.takenAt != null;
+                  await _pickDate(context, p);
+                  // Setting a date where there was none means "show it".
+                  if (!hadDate && p.takenAt != null) {
+                    p.showDate = true;
+                    c.changed();
+                  }
+                },
+                icon: const Icon(Icons.edit_calendar_outlined),
+                label: const Text('Change date'),
+              ),
+              if (c.photos.length > 1 && p.showDate && p.takenAt != null)
+                TextButton.icon(
+                  onPressed: () => c.applyStampToAll(p),
+                  icon: const Icon(Icons.copy_all_outlined),
+                  label: const Text('Same spot & size on all'),
+                ),
+            ],
+          ),
+        ],
+        if (anyShown) ...[
+          const _Label('Colour (all dates)'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: _ColorDots(
@@ -660,55 +729,6 @@ class _DatePanel extends StatelessWidget {
               },
             ),
           ),
-          if (p == null)
-            const _SelectHint('Tap a photo to resize, hide or change its date')
-          else ...[
-            _Label('Photo ${c.selected! + 1}'),
-            SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-              title: Text(p.takenAt == null
-                  ? 'No date found'
-                  : formatStampDate(p.takenAt!)),
-              subtitle: Text(p.takenAt == null
-                  ? 'Set one with "Change date"'
-                  : _sourceText(p)),
-              value: p.showDate,
-              onChanged: p.takenAt == null
-                  ? null
-                  : (v) {
-                      p.showDate = v;
-                      c.changed();
-                    },
-            ),
-            _SliderRow(
-              label: 'Size',
-              value: p.stamp.size,
-              min: DateStampPlacement.minSize,
-              max: DateStampPlacement.maxSize,
-              display: (v) => '${(v * 1000).round()}',
-              onChanged: (v) {
-                p.stamp.size = v;
-                c.changed();
-              },
-            ),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 4,
-              children: [
-                TextButton.icon(
-                  onPressed: () => _pickDate(context, p),
-                  icon: const Icon(Icons.edit_calendar_outlined),
-                  label: const Text('Change date'),
-                ),
-                if (c.photos.length > 1)
-                  TextButton.icon(
-                    onPressed: () => c.applyStampToAll(p),
-                    icon: const Icon(Icons.copy_all_outlined),
-                    label: const Text('Same spot & size on all'),
-                  ),
-              ],
-            ),
-          ],
         ],
       ],
     );

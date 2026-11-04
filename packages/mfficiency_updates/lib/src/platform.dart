@@ -72,4 +72,54 @@ class UpdatePlatform {
       return false;
     }
   }
+
+  /// The applicationId (package name); null off Android.
+  Future<String?> appId() => _call<String>('appId');
+
+  /// Copies the file at [path] to the public Downloads folder as
+  /// `Download/<folder>/<name>`, where it stays when the app is
+  /// uninstalled, and keeps the newest [keep] of this install's files there
+  /// (older ones are deleted). Returns where it went ("Download/…"), or
+  /// throws [PlatformException] (`no-storage`: Android 9 or older without
+  /// the storage permission).
+  Future<String> saveToDownloads(
+    String path, {
+    required String folder,
+    required String name,
+    int keep = 10,
+  }) async {
+    final where = await _channel.invokeMethod<String>('saveToDownloads', {
+      'path': path,
+      'folder': folder,
+      'name': name,
+      'keep': keep,
+    });
+    if (where == null) {
+      throw PlatformException(code: 'failed', message: 'nothing saved');
+    }
+    return where;
+  }
+
+  /// Lets the user pick a file (Android's file picker, starting in
+  /// Downloads) and copies it to the app's cache: its path, or null when
+  /// nothing was picked.
+  Future<String?> pickFile() => _call<String>('pickFile');
+
+  /// Another app's installed version, or null when it isn't installed (or
+  /// off Android). Only the packages the plugin's manifest lists.
+  Future<({String version, int build})?> packageInfo(String appId) async {
+    final info = await _call<Map<Object?, Object?>>('packageInfo', {'id': appId});
+    if (info == null) return null;
+    return (
+      version: '${info['versionName'] ?? ''}',
+      build: (info['versionCode'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Opens another installed app; false when it couldn't.
+  Future<bool> launchApp(String appId) async =>
+      await _call<bool>('launchApp', {'id': appId}) ?? false;
+
+  /// Closes the app and starts it again (after a restore).
+  Future<void> restartApp() => _call<void>('restartApp');
 }
