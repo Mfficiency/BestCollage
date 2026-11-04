@@ -384,7 +384,7 @@ class _SettingsPageState extends State<SettingsPage> {
         SwitchListTile(
           title: const Text('Date stamp on new collages'),
           subtitle: const Text(
-            'Show the date each photo was taken (dd.mm.yy) by default',
+            'New photos show the date they were taken (dd.mm.yy); turn it on or off per photo in Date',
           ),
           value: _s.dateStampByDefault,
           onChanged: (v) => _apply(() => _s.dateStampByDefault = v),

@@ -32,6 +32,9 @@ class Adjustments {
   /// -1 .. 1.
   double brightness;
 
+  /// -1 (flat) .. 1 (punchy).
+  double contrast;
+
   /// -1 (cool / blue) .. 1 (warm / orange).
   double warmth;
 
@@ -40,6 +43,7 @@ class Adjustments {
     this.hue = 0,
     this.saturation = 0,
     this.brightness = 0,
+    this.contrast = 0,
     this.warmth = 0,
   });
 
@@ -48,6 +52,7 @@ class Adjustments {
       hue == 0 &&
       saturation == 0 &&
       brightness == 0 &&
+      contrast == 0 &&
       warmth == 0;
 
   void reset() {
@@ -55,6 +60,7 @@ class Adjustments {
     hue = 0;
     saturation = 0;
     brightness = 0;
+    contrast = 0;
     warmth = 0;
   }
 
@@ -63,6 +69,7 @@ class Adjustments {
         hue: hue,
         saturation: saturation,
         brightness: brightness,
+        contrast: contrast,
         warmth: warmth,
       );
 
@@ -71,6 +78,7 @@ class Adjustments {
         'hue': hue,
         'saturation': saturation,
         'brightness': brightness,
+        'contrast': contrast,
         'warmth': warmth,
       };
 
@@ -84,6 +92,7 @@ class Adjustments {
     hue = jsonDouble(data['hue'], -180, 180) ?? 0;
     saturation = jsonDouble(data['saturation'], -1, 1) ?? 0;
     brightness = jsonDouble(data['brightness'], -1, 1) ?? 0;
+    contrast = jsonDouble(data['contrast'], -1, 1) ?? 0;
     warmth = jsonDouble(data['warmth'], -1, 1) ?? 0;
   }
 }

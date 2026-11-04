@@ -148,23 +148,39 @@ void main() {
 
     await tester.tap(find.text('Date'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Show date taken'));
-    await tester.pumpAndSettle();
-    expect(c.showDates, isTrue);
-    expect(find.text('01.05.24'), findsWidgets);
-    expect(find.text('24.12.23'), findsOneWidget);
+    expect(find.byKey(const Key('date-stamp-0')), findsNothing);
+    expect(find.byKey(const Key('date-stamp-1')), findsNothing);
 
-    // Hide it on the selected photo only.
-    await tester.tap(find.widgetWithText(SwitchListTile, '01.05.24'));
+    // Turning it on for the selected photo leaves the other one alone.
+    await tester.tap(find.byKey(const Key('photo-date-switch')));
+    await tester.pumpAndSettle();
+    expect(c.photos[0].showDate, isTrue);
+    expect(c.photos[1].showDate, isFalse);
+    expect(find.byKey(const Key('date-stamp-0')), findsOneWidget);
+    expect(find.byKey(const Key('date-stamp-1')), findsNothing);
+    expect(find.text('01.05.24'), findsWidgets);
+
+    // Then the second photo too, and off again on the first only.
+    c.selected = 1;
+    c.changed();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('photo-date-switch')));
+    await tester.pumpAndSettle();
+    expect(find.text('24.12.23'), findsOneWidget);
+    c.selected = 0;
+    c.changed();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('photo-date-switch')));
     await tester.pumpAndSettle();
     expect(c.photos[0].showDate, isFalse);
+    expect(c.photos[1].showDate, isTrue);
     expect(find.byKey(const Key('date-stamp-0')), findsNothing);
     expect(find.byKey(const Key('date-stamp-1')), findsOneWidget);
   });
 
   testWidgets('dragging a date stamp moves it', (tester) async {
     final c = await pumpPage(tester, photos: 1);
-    c.showDates = true;
+    c.photos[0].showDate = true;
     c.changed();
     await tester.pumpAndSettle();
     final before = c.photos[0].stamp.x;

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.23] - 2026-11-04
+- Date: turn the date stamp on or off for each photo by itself — select a photo in Date and flip its switch; there is no longer one switch for all photos. The colour still applies to every date shown
+- Color: new Contrast slider, for the whole collage or just the selected photo
+
 ## [0.4.22] - 2026-11-02
 - Every screen, menu, bottom sheet and dialog stays clear of Android's navigation bar: the app checks whether the bar is there and how tall it is (the slim gesture line or the Back/Home/Recents buttons, also on the side in landscape) and keeps every button and line of text above it; the strip behind the bar takes the page colour
 

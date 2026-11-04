@@ -339,7 +339,7 @@ class _PhotoCellState extends State<PhotoCell> {
                   ),
                 ),
               ),
-              if (c.showDates && p.showDate && p.takenAt != null)
+              if (p.showDate && p.takenAt != null)
                 _DateStamp(
                     c: c, photo: p, index: widget.index, shortSide: widget.shortSide),
               if (selected || candidates.isNotEmpty)

@@ -31,7 +31,6 @@ class CollageController extends ChangeNotifier {
   final Adjustments globalAdjustments = Adjustments();
   ColorScope colorScope = ColorScope.all;
 
-  bool showDates = AppSettings.instance.dateStampByDefault;
   Color dateColor = dateStampColors.first;
 
   /// Index into [photos] of the photo the Photo/Color/Date tools act on.
@@ -66,13 +65,12 @@ class CollageController extends ChangeNotifier {
   int addPhotos(List<PhotoItem> items) {
     final room = 4 - photos.length;
     final take = items.take(room).toList();
+    // Each photo's date stamp is on or off by itself; new photos start
+    // with the "Date stamp on new collages" setting.
     for (final p in take) {
-      p.showDate = true;
+      p.showDate = AppSettings.instance.dateStampByDefault;
     }
     photos.addAll(take);
-    if (photos.length == take.length && take.isNotEmpty) {
-      showDates = AppSettings.instance.dateStampByDefault;
-    }
     _resetLayoutForCount();
     selected ??= photos.isEmpty ? null : 0;
     LogService.add('collage', 'added ${take.length} photo(s), now ${photos.length}');
@@ -88,6 +86,7 @@ class CollageController extends ChangeNotifier {
       ..hue = old.adjustments.hue
       ..saturation = old.adjustments.saturation
       ..brightness = old.adjustments.brightness
+      ..contrast = old.adjustments.contrast
       ..warmth = old.adjustments.warmth;
     item.stamp = old.stamp.copy();
     item.showDate = old.showDate;
@@ -202,7 +201,6 @@ class CollageController extends ChangeNotifier {
         'frame': frame,
         'globalAdjustments': globalAdjustments.toJson(),
         'colorScope': colorScope.name,
-        'showDates': showDates,
         'dateColor': dateColor.toARGB32(),
         'selected': selected,
         'photos': [for (final p in photos) p.toJson()],
@@ -264,7 +262,12 @@ class CollageController extends ChangeNotifier {
             .where((s) => s.name == state['colorScope'])
             .firstOrNull ??
         ColorScope.all;
-    showDates = state['showDates'] as bool? ?? showDates;
+    // Collages saved before dates were per photo had one switch for all.
+    if (state['showDates'] == false) {
+      for (final p in photos) {
+        p.showDate = false;
+      }
+    }
     dateColor = _color(state['dateColor'], dateStampColors) ?? dateColor;
     final sel = state['selected'];
     selected = photos.isEmpty
