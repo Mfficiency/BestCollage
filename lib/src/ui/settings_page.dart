@@ -9,13 +9,22 @@ import 'subpage_app_bar.dart';
 import 'widgets/settings_section.dart';
 import 'widgets/spacing.dart';
 
-/// Single-page, searchable Settings screen.
-///
-/// Two navigation aids, both lifted from the host app:
+/// Single-page, searchable Settings screen, laid out like every Mfficiency
+/// app (Vesta Immo's settings page is the reference):
 ///  * A pinned header of **section chips** — tap one to smoothly scroll to that
-///    section; the active chip highlights as you scroll.
+///    section; the active chip follows the scroll position.
 ///  * A **search** (magnifier in the app bar) that filters every individual
-///    setting by title/keyword; tapping a result jumps to its section.
+///    setting by title/keyword; tapping a result opens and jumps to its section.
+///  * Foldable section cards ([SettingsSection]) with Collapse/Expand all.
+///    Order and rows as in every Mfficiency app (the template's
+///    docs/CONCEPT.md §5): Appearance first (Theme · Compact mode · Time
+///    format · Date format, then the app's own), Collage, Releases (Show
+///    what's new after an update), Manage data (the JSON export / import),
+///    then Debugging (Send a report · GitHub token), Updates (Check
+///    automatically · Check for updates · GitHub token) and Backup & data
+///    (Back up everything · Restore from a backup · Backup location ·
+///    Automatic backup · Last backup) last. Those three hold exactly those
+///    rows, the updates package's tiles.
 ///
 /// Every setting reads and writes [AppSettings]; saving notifies listeners so
 /// the theme updates instantly. Export/import use the versioned
@@ -32,40 +41,90 @@ class _SettingsPageState extends State<SettingsPage> {
 
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _tabsHeaderKey = GlobalKey();
-  final List<GlobalKey> _sectionKeys =
-      List<GlobalKey>.generate(_sectionTitles.length, (_) => GlobalKey());
+  // Every visit starts with all sections collapsed (the same in every
+  // Mfficiency app); a header, chip or search result opens one.
+  final Set<String> _collapsed = {..._sectionTitles};
+  final List<GlobalKey> _sectionKeys = List<GlobalKey>.generate(
+    _sectionTitles.length,
+    (_) => GlobalKey(),
+  );
   static const List<String> _sectionTitles = [
     'Appearance',
     'Collage',
+    'Releases',
+    'Manage data',
+    'Debugging',
     'Updates',
-    'Data',
+    'Backup & data',
   ];
   int _activeSectionIndex = 0;
-  static const double _tabsHeaderHeight = 60;
-  static const double _sectionActivationOffset = 56;
-  double _lastScrollOffset = 0;
+  static const double _tabsHeaderHeight = 64;
 
   bool _searchActive = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
-  /// Every visible setting, so search can find it. Section indexes match
+  /// Every setting, so search can find it (like Vesta's `_searchIndex`). Section indexes match
   /// [_sectionTitles]; keywords add synonyms users might type.
   static const List<_SearchEntry> _searchEntries = [
-    _SearchEntry('Theme', 0, 'appearance system light dark colour color mode'),
-    _SearchEntry('Minimalist mode', 0,
-        'monochrome calm plain simple no colours underline'),
-    _SearchEntry('24-hour time', 0, 'clock am pm 12-hour format'),
+    _SearchEntry(
+      'Theme (system, light, dark)',
+      0,
+      'appearance system light dark night colour color mode',
+    ),
+    _SearchEntry('Compact mode', 0, 'dense density tight spacing small'),
+    _SearchEntry('Time format', 0, 'clock am pm 12-hour 24-hour'),
     _SearchEntry('Date format', 0, 'display day month year'),
+    _SearchEntry(
+      'Minimalist mode',
+      0,
+      'monochrome calm plain simple no colours underline',
+    ),
     _SearchEntry('Export size', 1, 'resolution pixels quality save picture'),
     _SearchEntry('Date stamp on new collages', 1, 'date taken show default'),
-    _SearchEntry('Check for updates', 2,
-        'update upgrade new version install apk download latest'),
-    _SearchEntry('Automatically check for updates', 2,
-        'update upgrade new version install apk download'),
-    _SearchEntry('Export everything', 3, 'backup save json data settings'),
-    _SearchEntry('Export settings', 3, 'backup save json'),
-    _SearchEntry('Import', 3, 'restore backup load json'),
+    _SearchEntry(
+      "Show what's new after an update",
+      2,
+      'whats new changelog changes release notes popup update',
+    ),
+    _SearchEntry('Export everything', 3, 'backup save json data settings file'),
+    _SearchEntry('Export settings', 3, 'backup save json preferences'),
+    _SearchEntry('Import', 3, 'restore backup load json file'),
+    _SearchEntry(
+        'Send a report', 4, 'claude bug problem report issue logs fix'),
+    _SearchEntry(
+      'GitHub token (problem reports)',
+      4,
+      'token key pat github claude report issue',
+    ),
+    _SearchEntry(
+      'Check automatically',
+      5,
+      'update upgrade new version install apk download',
+    ),
+    _SearchEntry(
+      'Check for updates',
+      5,
+      'update upgrade new version install apk download latest',
+    ),
+    _SearchEntry(
+      'GitHub token (updates)',
+      5,
+      'token key private pat github access',
+    ),
+    _SearchEntry(
+      'Back up everything',
+      6,
+      'backup full downloads photos collages reinstall uninstall',
+    ),
+    _SearchEntry(
+      'Restore from a backup',
+      6,
+      'restore backup full downloads reinstall',
+    ),
+    _SearchEntry('Backup location', 6, 'folder downloads where'),
+    _SearchEntry('Automatic backup', 6, 'schedule daily weekly off backup'),
+    _SearchEntry('Last backup', 6, 'when backup date'),
   ];
 
   @override
@@ -92,66 +151,69 @@ class _SettingsPageState extends State<SettingsPage> {
     await _s.save(); // persists + notifies listeners (theme refreshes)
   }
 
-  // --- Scroll / section tracking (verbatim mechanism from the host) ---------
+  // --- Scroll / section tracking (Vesta's mechanism) ----------------------
 
   Future<void> _jumpToSection(int index) async {
-    setState(() => _activeSectionIndex = index);
-    if (_scrollController.hasClients) {
-      var attempts = 0;
-      while (_sectionKeys[index].currentContext == null && attempts < 20) {
-        final position = _scrollController.position;
-        final maxExtent = position.maxScrollExtent;
-        if (_scrollController.offset >= maxExtent - 1) break;
-        final target = (position.pixels + position.viewportDimension)
-            .clamp(0.0, maxExtent);
-        await _scrollController.animateTo(target,
-            duration: const Duration(milliseconds: 120), curve: Curves.easeOut);
-        attempts++;
-      }
-    }
-    final sectionContext = _sectionKeys[index].currentContext;
-    if (sectionContext == null) return;
-    await Scrollable.ensureVisible(sectionContext,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeInOut,
-        alignment: 0.02);
+    // A chip opens its section too: they all start collapsed.
+    setState(() {
+      _activeSectionIndex = index;
+      _collapsed.remove(_sectionTitles[index]);
+    });
+    await WidgetsBinding.instance.endOfFrame;
+    final ctx = _sectionKeys[index].currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+      alignment: 0.02,
+    );
   }
 
+  /// The active chip is the last section whose top is above the line 24 px
+  /// under the pinned header.
   void _updateActiveSectionFromScroll() {
-    final currentOffset = _scrollController.hasClients
-        ? _scrollController.offset
-        : _lastScrollOffset;
-    final isScrollingDown = currentOffset > _lastScrollOffset + 0.5;
-    final isScrollingUp = currentOffset < _lastScrollOffset - 0.5;
-    _lastScrollOffset = currentOffset;
-
-    final tabsContext = _tabsHeaderKey.currentContext;
-    if (tabsContext == null) return;
-    final tabsBox = tabsContext.findRenderObject() as RenderBox?;
-    if (tabsBox == null || !tabsBox.hasSize) return;
-
-    final tabsBottom =
-        tabsBox.localToGlobal(Offset.zero).dy + tabsBox.size.height;
-    final activationLine = tabsBottom + _sectionActivationOffset;
+    final tabs =
+        _tabsHeaderKey.currentContext?.findRenderObject() as RenderBox?;
+    if (tabs == null || !tabs.hasSize) return;
+    final line = tabs.localToGlobal(Offset.zero).dy + tabs.size.height + 24;
     var index = 0;
     for (var i = 0; i < _sectionKeys.length; i++) {
-      final sectionContext = _sectionKeys[i].currentContext;
-      if (sectionContext == null) continue;
-      final sectionBox = sectionContext.findRenderObject() as RenderBox?;
-      if (sectionBox == null || !sectionBox.hasSize) continue;
-      final sectionTop = sectionBox.localToGlobal(Offset.zero).dy;
-      if (sectionTop <= activationLine) {
-        index = i;
-      } else {
-        break;
-      }
+      final box =
+          _sectionKeys[i].currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) continue;
+      if (box.localToGlobal(Offset.zero).dy <= line) index = i;
     }
-    if (isScrollingDown && index < _activeSectionIndex) return;
-    if (isScrollingUp && index > _activeSectionIndex) return;
     if (index != _activeSectionIndex && mounted) {
       setState(() => _activeSectionIndex = index);
     }
   }
+
+  // --- Folding --------------------------------------------------------------
+
+  void _toggleSection(int index) => setState(() {
+        final title = _sectionTitles[index];
+        if (!_collapsed.remove(title)) _collapsed.add(title);
+      });
+
+  bool get _anyExpanded => _collapsed.length < _sectionTitles.length;
+
+  void _toggleAll() => setState(() {
+        if (_anyExpanded) {
+          _collapsed.addAll(_sectionTitles);
+        } else {
+          _collapsed.clear();
+        }
+      });
+
+  /// One foldable card; [index] picks title and key from [_sectionTitles].
+  Widget _section(int index, List<Widget> children) => SettingsSection(
+        sectionKey: _sectionKeys[index],
+        title: _sectionTitles[index],
+        collapsed: _collapsed.contains(_sectionTitles[index]),
+        onToggle: () => _toggleSection(index),
+        children: children,
+      );
 
   // --- Search ---------------------------------------------------------------
 
@@ -159,10 +221,11 @@ class _SettingsPageState extends State<SettingsPage> {
     final q = _searchQuery.trim().toLowerCase();
     if (q.isEmpty) return const [];
     return _searchEntries
-        .where((e) =>
-            e.title.toLowerCase().contains(q) ||
-            e.keywords.contains(q) ||
-            _sectionTitles[e.sectionIndex].toLowerCase().contains(q))
+        .where(
+          (e) => '${e.title} ${e.keywords} ${_sectionTitles[e.sectionIndex]}'
+              .toLowerCase()
+              .contains(q),
+        )
         .toList();
   }
 
@@ -174,6 +237,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _openSearchResult(_SearchEntry entry) {
     _closeSearch();
+    setState(() => _collapsed.remove(_sectionTitles[entry.sectionIndex]));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _jumpToSection(entry.sectionIndex);
     });
@@ -187,8 +251,10 @@ class _SettingsPageState extends State<SettingsPage> {
       _snack('Export canceled');
       return;
     }
-    final file = await BackupService.instance
-        .exportToDirectory(dir, includeData: includeData);
+    final file = await BackupService.instance.exportToDirectory(
+      dir,
+      includeData: includeData,
+    );
     _snack(file != null ? 'Exported to ${file.path}' : 'Export failed');
   }
 
@@ -208,183 +274,200 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // --- Sections -------------------------------------------------------------
 
-  Widget _appearanceSection() => SettingsSection(
-        sectionKey: _sectionKeys[0],
-        title: 'Appearance',
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
-            child: Row(
-              children: [
-                const Expanded(child: Text('Theme')),
-                SegmentedButton<AppThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                        value: AppThemeMode.system,
-                        icon: Icon(Icons.brightness_auto),
-                        tooltip: 'System'),
-                    ButtonSegment(
-                        value: AppThemeMode.light,
-                        icon: Icon(Icons.light_mode),
-                        tooltip: 'Light'),
-                    ButtonSegment(
-                        value: AppThemeMode.dark,
-                        icon: Icon(Icons.dark_mode),
-                        tooltip: 'Dark'),
-                  ],
-                  selected: {_s.themeMode},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (set) =>
-                      _apply(() => _s.themeMode = set.first),
-                ),
-              ],
-            ),
+  Widget _appearanceSection() => _section(0, [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.sm,
           ),
-          SwitchListTile(
-            title: const Text('Minimalist mode'),
-            subtitle: const Text(
-                'Calm monochrome look: no colours, underlines instead of '
-                'highlights'),
-            value: _s.minimalist,
-            onChanged: (v) => _apply(() => _s.minimalist = v),
+          child: Row(
+            children: [
+              const Expanded(child: Text('Theme')),
+              SegmentedButton<AppThemeMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: AppThemeMode.system,
+                    icon: Icon(Icons.brightness_auto),
+                    tooltip: 'System',
+                  ),
+                  ButtonSegment(
+                    value: AppThemeMode.light,
+                    icon: Icon(Icons.light_mode),
+                    tooltip: 'Light',
+                  ),
+                  ButtonSegment(
+                    value: AppThemeMode.dark,
+                    icon: Icon(Icons.dark_mode),
+                    tooltip: 'Dark',
+                  ),
+                ],
+                selected: {_s.themeMode},
+                showSelectedIcon: false,
+                onSelectionChanged: (set) =>
+                    _apply(() => _s.themeMode = set.first),
+              ),
+            ],
           ),
-          SwitchListTile(
-            title: const Text('24-hour time'),
-            subtitle: const Text('Turn off for 12-hour AM/PM time'),
-            value: _s.use24HourFormat,
-            onChanged: (v) => _apply(() => _s.use24HourFormat = v),
-          ),
-          ListTile(
-            title: const Text('Date format'),
-            subtitle: Text(formatDate(DateTime(2026, 3, 9))),
-            trailing: DropdownButton<String>(
-              value: _s.dateFormat,
-              items: AppSettings.dateFormats
-                  .map((f) => DropdownMenuItem(value: f, child: Text(f)))
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) _apply(() => _s.dateFormat = v);
-              },
-            ),
-          ),
-        ],
-      );
-
-  Widget _collageSection() => SettingsSection(
-        sectionKey: _sectionKeys[1],
-        title: 'Collage',
-        children: [
-          ListTile(
-            title: const Text('Export size'),
-            subtitle: const Text('Long edge of the saved picture'),
-            trailing: DropdownButton<int>(
-              value: AppSettings.exportSizes.contains(_s.exportLongEdge)
-                  ? _s.exportLongEdge
-                  : AppSettings.exportSizes.first,
-              items: AppSettings.exportSizes
-                  .map((px) =>
-                      DropdownMenuItem(value: px, child: Text('$px px')))
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) _apply(() => _s.exportLongEdge = v);
-              },
-            ),
-          ),
-          SwitchListTile(
-            title: const Text('Date stamp on new collages'),
-            subtitle: const Text(
-                'Show the date each photo was taken (dd.mm.yy) by default'),
-            value: _s.dateStampByDefault,
-            onChanged: (v) => _apply(() => _s.dateStampByDefault = v),
-          ),
-        ],
-      );
-
-  Widget _updatesSection() {
-    final controller = AppUpdates.instance.controller;
-    return SettingsSection(
-      sectionKey: _sectionKeys[2],
-      title: 'Updates',
-      children: [
-        // Checks now; a newer build downloads silently and Android asks
-        // "Update this app?" when it is complete. Progress as the subtitle.
-        ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) {
-            final busy = controller.checking.value;
-            return ListTile(
-              key: const Key('settings.update.check'),
-              title: Text(controller.checkTileTitle(context)),
-              subtitle: Text(controller.checkTileSubtitle(context)),
-              trailing: busy
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : null,
-              onTap: busy ? null : () => controller.checkNow(context),
-            );
-          },
         ),
         SwitchListTile(
-          title: const Text('Automatically check for updates'),
+          title: const Text('Compact mode'),
           subtitle: const Text(
-              'Checks for a newer version every 15 minutes while the app is '
-              'open and downloads it silently in the background; when it is '
-              'complete Android asks "Update this app?". Nothing installs '
-              'without your tap. Check for updates always works.'),
-          value: _s.autoUpdateCheckEnabled,
-          onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
+            'Tighter spacing in lists, menus and every screen',
+          ),
+          value: _s.compact,
+          onChanged: (v) => _apply(() => _s.compact = v),
         ),
-      ],
-    );
+        ListTile(
+          title: const Text('Time format'),
+          subtitle: Text(formatTime(DateTime(2026, 3, 9, 14, 30))),
+          trailing: DropdownButton<bool>(
+            key: const Key('settings.timeFormat'),
+            value: _s.use24HourFormat,
+            items: const [
+              DropdownMenuItem(value: true, child: Text('24-hour')),
+              DropdownMenuItem(value: false, child: Text('12-hour')),
+            ],
+            onChanged: (v) {
+              if (v != null) _apply(() => _s.use24HourFormat = v);
+            },
+          ),
+        ),
+        ListTile(
+          title: const Text('Date format'),
+          subtitle: Text(formatDate(DateTime(2026, 3, 9))),
+          trailing: DropdownButton<String>(
+            value: _s.dateFormat,
+            items: AppSettings.dateFormats
+                .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) _apply(() => _s.dateFormat = v);
+            },
+          ),
+        ),
+        SwitchListTile(
+          title: const Text('Minimalist mode'),
+          subtitle: const Text(
+            'Calm monochrome look: no colours, underlines instead of '
+            'highlights',
+          ),
+          value: _s.minimalist,
+          onChanged: (v) => _apply(() => _s.minimalist = v),
+        ),
+      ]);
+
+  Widget _collageSection() => _section(1, [
+        ListTile(
+          title: const Text('Export size'),
+          subtitle: const Text('Long edge of the saved picture'),
+          trailing: DropdownButton<int>(
+            value: AppSettings.exportSizes.contains(_s.exportLongEdge)
+                ? _s.exportLongEdge
+                : AppSettings.exportSizes.first,
+            items: AppSettings.exportSizes
+                .map((px) => DropdownMenuItem(value: px, child: Text('$px px')))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) _apply(() => _s.exportLongEdge = v);
+            },
+          ),
+        ),
+        SwitchListTile(
+          title: const Text('Date stamp on new collages'),
+          subtitle: const Text(
+            'New photos show the date they were taken (dd.mm.yy); turn it on or off per photo in Date',
+          ),
+          value: _s.dateStampByDefault,
+          onChanged: (v) => _apply(() => _s.dateStampByDefault = v),
+        ),
+      ]);
+
+  /// Send a report (to Claude) · GitHub token (for the reports).
+  /// Show what's new after an update (on by default).
+  Widget _releasesSection() => _section(2, [
+        SwitchListTile(
+          secondary: const Icon(Icons.new_releases_outlined),
+          title: const Text("Show what's new after an update"),
+          subtitle: const Text('The changes since your last version, once'),
+          value: _s.whatsNew,
+          onChanged: (v) => _apply(() => _s.whatsNew = v),
+        ),
+      ]);
+
+  /// The app's own JSON export and import.
+  Widget _manageDataSection() => _section(3, [
+        ListTile(
+          leading: const Icon(Icons.file_download),
+          title: const Text('Export everything'),
+          subtitle: const Text(
+            'Settings and data as a JSON file in a folder you pick',
+          ),
+          onTap: () => _export(includeData: true),
+        ),
+        ListTile(
+          leading: const Icon(Icons.tune),
+          title: const Text('Export settings'),
+          subtitle: const Text('Only the settings, as a JSON file'),
+          onTap: () => _export(includeData: false),
+        ),
+        ListTile(
+          leading: const Icon(Icons.file_upload),
+          title: const Text('Import'),
+          subtitle: const Text('Settings and data from an exported JSON file'),
+          onTap: _import,
+        ),
+      ]);
+
+  Widget _debuggingSection() {
+    final reporter = AppUpdates.instance.problemReport;
+    return _section(4, [
+      ProblemReportSendTile(reporter: reporter),
+      ProblemReportSettingsTile(reporter: reporter),
+    ]);
   }
 
-  Widget _dataSection() => SettingsSection(
-        sectionKey: _sectionKeys[3],
-        title: 'Data',
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FilledButton.icon(
-                  onPressed: () => _export(includeData: true),
-                  icon: const Icon(Icons.file_download),
-                  label: const Text('Export Everything'),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                FilledButton.icon(
-                  onPressed: () => _export(includeData: false),
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Export Settings'),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Text('Restore',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: AppSpacing.sm),
-                FilledButton.icon(
-                  onPressed: _import,
-                  icon: const Icon(Icons.file_upload),
-                  label: const Text('Import'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
+  /// Check automatically · Check for updates · GitHub token (read access to
+  /// the release repo, needed once it is private).
+  Widget _updatesSection() {
+    final updates = AppUpdates.instance;
+    return _section(5, [
+      SwitchListTile(
+        secondary: const Icon(Icons.update),
+        title: const Text('Check automatically'),
+        subtitle: const Text(
+            'Downloads new versions; Android asks before installing'),
+        value: _s.autoUpdateCheckEnabled,
+        onChanged: (v) => _apply(() => _s.autoUpdateCheckEnabled = v),
+      ),
+      // Checks now; a newer build downloads silently and Android asks
+      // "Update this app?" when it is complete. Progress as the subtitle.
+      UpdateCheckTile(controller: updates.controller),
+      UpdateTokenTile(
+        controller: updates.controller,
+        repo: AppUpdates.repo,
+        readToken: updates.readToken,
+        writeToken: updates.writeToken,
+        openUrl: AppUpdates.openUrl,
+      ),
+    ]);
+  }
+
+  /// The full backup's five rows (Android only), nothing else.
+  Widget _dataSection() => _section(6, [
+        // Everything (collages, photo copies, settings) as one file in
+        // Download/BestCollage/Backups, kept when the app is uninstalled.
+        if (AppUpdates.instance.backup case final backup?)
+          FullBackupTiles(backup: backup, strings: AppUpdates.backupStrings),
+      ]);
 
   Widget _buildSearchField() => TextField(
         controller: _searchController,
@@ -392,7 +475,7 @@ class _SettingsPageState extends State<SettingsPage> {
         decoration: InputDecoration(
           hintText: 'Search settings',
           border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchQuery.isEmpty
               ? null
@@ -413,18 +496,20 @@ class _SettingsPageState extends State<SettingsPage> {
     if (results.isEmpty) {
       return const [
         Padding(
-          padding: EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.all(24),
           child: Center(child: Text('No settings match your search')),
         ),
       ];
     }
     return results
-        .map<Widget>((e) => ListTile(
-              title: Text(e.title),
-              subtitle: Text(_sectionTitles[e.sectionIndex]),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openSearchResult(e),
-            ))
+        .map<Widget>(
+          (e) => ListTile(
+            title: Text(e.title),
+            subtitle: Text(_sectionTitles[e.sectionIndex]),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _openSearchResult(e),
+          ),
+        )
         .toList();
   }
 
@@ -459,43 +544,63 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Container(
                 key: _tabsHeaderKey,
                 color: Theme.of(context).scaffoldBackgroundColor,
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 child: _searchActive
                     ? _buildSearchField()
-                    : SingleChildScrollView(
+                    : ListView(
                         scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children:
-                              List<Widget>.generate(_sectionTitles.length, (i) {
-                            return Padding(
-                              padding:
-                                  const EdgeInsets.only(right: AppSpacing.sm),
+                        children: [
+                          for (var i = 0; i < _sectionTitles.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
                                 label: Text(_sectionTitles[i]),
                                 selected: _activeSectionIndex == i,
                                 onSelected: (_) => _jumpToSection(i),
                               ),
-                            );
-                          }),
-                        ),
+                            ),
+                        ],
                       ),
               ),
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.lg),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate(
-                showSearchResults
-                    ? _buildSearchResultTiles()
-                    : [
-                        _appearanceSection(),
-                        _collageSection(),
-                        _updatesSection(),
-                        _dataSection(),
-                      ],
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+            sliver: SliverToBoxAdapter(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 820),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: showSearchResults
+                        ? _buildSearchResultTiles()
+                        : [
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: _toggleAll,
+                                icon: Icon(
+                                  _anyExpanded
+                                      ? Icons.unfold_less
+                                      : Icons.unfold_more,
+                                ),
+                                label: Text(
+                                  _anyExpanded ? 'Collapse all' : 'Expand all',
+                                ),
+                              ),
+                            ),
+                            _appearanceSection(),
+                            _collageSection(),
+                            _releasesSection(),
+                            _manageDataSection(),
+                            _debuggingSection(),
+                            _updatesSection(),
+                            _dataSection(),
+                            // Lets the last section scroll to the top.
+                            const SizedBox(height: 200),
+                          ],
+                  ),
+                ),
               ),
             ),
           ),

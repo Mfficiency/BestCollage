@@ -50,9 +50,9 @@ CollageController editedCollage() {
   c
     ..shape = CanvasShape.all.firstWhere((s) => s.label == '9:16')
     ..border = 14
+    ..frame = 20
     ..cornerRadius = 9
     ..borderColor = borderColors[2]
-    ..showDates = true
     ..dateColor = dateStampColors[3]
     ..colorScope = ColorScope.selected
     ..selected = 2
@@ -75,6 +75,7 @@ CollageController editedCollage() {
     ..tone = ToneFilter.mono
     ..hue = 45
     ..brightness = 0.25
+    ..contrast = 0.4
     ..warmth = -0.5;
   return c;
 }
@@ -98,9 +99,9 @@ void main() {
       expect(c.shape.label, '9:16');
       expect(identical(c.shape, CanvasShape.all[3]), isTrue);
       expect(c.border, 14);
+      expect(c.frame, 20);
       expect(c.cornerRadius, 9);
       expect(c.borderColor, borderColors[2]);
-      expect(c.showDates, isTrue);
       expect(c.dateColor, dateStampColors[3]);
       expect(c.colorScope, ColorScope.selected);
       expect(c.selected, 2);
@@ -123,10 +124,22 @@ void main() {
       expect(p.adjustments.tone, ToneFilter.mono);
       expect(p.adjustments.hue, 45);
       expect(p.adjustments.brightness, 0.25);
+      expect(p.adjustments.contrast, 0.4);
       expect(p.adjustments.warmth, -0.5);
       // Untouched photos keep their EXIF date.
       expect(c.photos[0].takenAt, DateTime(2024, 5, 1));
       expect(c.photos[0].dateSource, DateSource.exif);
+    });
+
+    test('an older collage with dates switched off keeps them off', () {
+      final saved = jsonDecode(jsonEncode(editedCollage().toJson()))
+          as Map<String, dynamic>;
+      for (final p in saved['photos'] as List) {
+        (p as Map)['showDate'] = true;
+      }
+      saved['showDates'] = false;
+      final c = CollageController()..restore(saved, reload(saved));
+      expect(c.photos.any((p) => p.showDate), isFalse);
     });
 
     test('a missing photo drops out and the layout fits the rest', () {
@@ -145,12 +158,14 @@ void main() {
       final saved = editedCollage().toJson()
         ..['layout'] = {'axis': 'diagonal'}
         ..['border'] = 500
+        ..['frame'] = 500
         ..['borderColor'] = 0x12345678;
       final c = CollageController();
       c.restore(saved, reload(saved));
       expect(c.preset.id, '3-top');
       expect((c.layout as SplitNode).ratio, 0.6);
       expect(c.border, 24);
+      expect(c.frame, CollageController.maxFrame);
       expect(c.borderColor, borderColors.first);
     });
 
@@ -161,7 +176,15 @@ void main() {
       expect(r.isEmpty, isTrue);
       expect(r.shape.label, '9:16');
       expect(r.border, 14);
+      expect(r.frame, 20);
       expect(r.historyId, isNull);
+    });
+
+    test('a collage saved before the frame existed has none', () {
+      final saved = editedCollage().toJson()..remove('frame');
+      final c = CollageController()..frame = 30;
+      c.restore(saved, reload(saved));
+      expect(c.frame, 0);
     });
   });
 

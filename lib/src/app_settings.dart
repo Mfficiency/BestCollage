@@ -39,6 +39,10 @@ class AppSettings extends ChangeNotifier {
   // --- Appearance -----------------------------------------------------------
   AppThemeMode themeMode = AppThemeMode.system;
   bool minimalist = false;
+
+  /// Compact mode: tighter spacing in every screen through the theme's
+  /// visual density ([AppTheme]).
+  bool compact = false;
   bool use24HourFormat = true;
   String dateFormat = dateFormats.first;
 
@@ -72,6 +76,11 @@ class AppSettings extends ChangeNotifier {
   /// Poll GitHub every 15 minutes while the app is open and offer to download
   /// and install a newer build from any channel (Android only).
   bool autoUpdateCheckEnabled = true;
+
+  // --- Releases -------------------------------------------------------------
+  /// After an update, show the changelog entries since the version the user
+  /// had before, once (Settings › Releases; on by default).
+  bool whatsNew = true;
 
   // --- Notifications --------------------------------------------------------
   bool notificationsEnabled = false;
@@ -122,6 +131,7 @@ class AppSettings extends ChangeNotifier {
   Map<String, dynamic> toMap() => {
         'themeMode': themeMode.name,
         'minimalist': minimalist,
+        'compact': compact,
         'use24HourFormat': use24HourFormat,
         'dateFormat': dateFormat,
         'startPageKey': startPageKey,
@@ -136,6 +146,7 @@ class AppSettings extends ChangeNotifier {
           for (final e in saveMillis.entries) '${e.key}': e.value,
         },
         'autoUpdateCheckEnabled': autoUpdateCheckEnabled,
+        'whatsNew': whatsNew,
       };
 
   /// Applies a settings map tolerantly: unknown/missing keys keep the current
@@ -149,6 +160,7 @@ class AppSettings extends ChangeNotifier {
       }
     }
     minimalist = data['minimalist'] as bool? ?? minimalist;
+    compact = data['compact'] as bool? ?? compact;
     use24HourFormat = data['use24HourFormat'] as bool? ?? use24HourFormat;
 
     final fmt = data['dateFormat'] as String?;
@@ -178,6 +190,7 @@ class AppSettings extends ChangeNotifier {
         data['dateStampByDefault'] as bool? ?? dateStampByDefault;
     autoUpdateCheckEnabled =
         data['autoUpdateCheckEnabled'] as bool? ?? autoUpdateCheckEnabled;
+    whatsNew = data['whatsNew'] as bool? ?? whatsNew;
     final save = data['saveMillis'];
     if (save is Map) {
       saveMillis = {
@@ -192,6 +205,7 @@ class AppSettings extends ChangeNotifier {
   void resetForTest() {
     themeMode = AppThemeMode.system;
     minimalist = false;
+    compact = false;
     use24HourFormat = true;
     dateFormat = dateFormats.first;
     startPageKey = AppConfig.startPages.first.key;
@@ -204,5 +218,6 @@ class AppSettings extends ChangeNotifier {
     dateStampByDefault = false;
     saveMillis = {};
     autoUpdateCheckEnabled = true;
+    whatsNew = true;
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,7 +8,9 @@ import 'app_settings.dart';
 import 'services/app_updates.dart';
 import 'theme/app_theme.dart';
 import 'ui/intro_page.dart';
+import 'ui/whats_new.dart';
 import 'collage/collage_page.dart';
+import 'ui/widgets/system_bar_safe_area.dart';
 
 /// Root widget. Rebuilds the [MaterialApp] theme whenever [AppSettings] changes
 /// (it listens to the singleton [ChangeNotifier]), shows the first-run intro,
@@ -48,7 +52,22 @@ class CollageAppState extends State<CollageApp> {
     super.initState();
     // Rebuild (and re-theme) whenever any setting changes.
     _settings.addListener(_onSettingsChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startUpdates());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _offerRestore();
+      _startUpdates();
+    });
+  }
+
+  /// On a new install (a reinstall too), asks once whether to restore a
+  /// full backup from Download/BestCollage/Backups (Android only).
+  void _offerRestore() {
+    final context = _navigatorKey.currentContext;
+    final backup = AppUpdates.instance.backup;
+    if (!mounted || context == null || backup == null) return;
+    unawaited(backup.offerRestore(context, strings: AppUpdates.backupStrings));
+    // Settings › Backup & data › Automatic backup: one now when due, and
+    // whenever the app comes back to the foreground.
+    backup.startSchedule();
   }
 
   @override
@@ -68,6 +87,9 @@ class CollageAppState extends State<CollageApp> {
     if (_updatesStarted || _showIntro || !mounted || context == null) return;
     _updatesStarted = true;
     AppUpdates.instance.controller.start(context);
+    // After an update, once: the changelog entries since the version the
+    // user had before (Settings › Releases turns it off).
+    unawaited(maybeShowWhatsNew(context));
   }
 
   Future<void> _finishIntro() async {
@@ -95,6 +117,8 @@ class CollageAppState extends State<CollageApp> {
       theme: AppTheme.light(_settings),
       darkTheme: AppTheme.dark(_settings),
       themeMode: _settings.materialThemeMode,
+      // Every screen, sheet and dialog stays clear of Android's navigation bar.
+      builder: (context, child) => SystemBarSafeArea(child: child!),
       home: _showIntro
           ? IntroPage(onFinished: _finishIntro)
           : const CollagePage(),

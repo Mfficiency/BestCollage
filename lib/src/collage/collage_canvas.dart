@@ -39,14 +39,20 @@ class CollageCanvas extends StatelessWidget {
           key: boundaryKey,
           child: LayoutBuilder(builder: (context, box) {
             final shortSide = box.biggest.shortestSide;
+            // The white frame wraps the coloured border; both take their
+            // space from the photos instead of covering them.
             return Container(
-              color: c.borderColor,
-              padding: EdgeInsets.all(c.border),
-              child: _NodeView(
-                node: c.layout,
-                c: c,
-                shortSide: shortSide,
-                onAddPhoto: onAddPhoto,
+              color: CollageController.frameColor,
+              padding: EdgeInsets.all(c.frame),
+              child: Container(
+                color: c.borderColor,
+                padding: EdgeInsets.all(c.border),
+                child: _NodeView(
+                  node: c.layout,
+                  c: c,
+                  shortSide: shortSide,
+                  onAddPhoto: onAddPhoto,
+                ),
               ),
             );
           }),
@@ -333,7 +339,7 @@ class _PhotoCellState extends State<PhotoCell> {
                   ),
                 ),
               ),
-              if (c.showDates && p.showDate && p.takenAt != null)
+              if (p.showDate && p.takenAt != null)
                 _DateStamp(
                     c: c, photo: p, index: widget.index, shortSide: widget.shortSide),
               if (selected || candidates.isNotEmpty)
