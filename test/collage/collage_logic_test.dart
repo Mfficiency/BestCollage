@@ -34,6 +34,17 @@ void main() {
       }
     });
 
+    test('contrast spreads colours around mid grey', () {
+      final up = ColorMatrix.forAdjustments(Adjustments(contrast: 1));
+      expect(up[0], greaterThan(1));
+      expect(up[0] * 128 + up[4], closeTo(128, 1e-9)); // mid grey stays
+      final down = ColorMatrix.forAdjustments(Adjustments(contrast: -1));
+      expect(down[0], lessThan(1));
+      expect(Adjustments(contrast: 0.3).isIdentity, isFalse);
+      expect(ColorMatrix.filterFor(Adjustments(), Adjustments(contrast: -0.5)),
+          isNotNull);
+    });
+
     test('a photo adjustment stacks on top of the collage one', () {
       final global = Adjustments(brightness: 0.5);
       final own = Adjustments(tone: ToneFilter.mono);

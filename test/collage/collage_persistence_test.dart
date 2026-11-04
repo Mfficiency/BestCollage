@@ -74,6 +74,7 @@ CollageController editedCollage() {
     ..tone = ToneFilter.mono
     ..hue = 45
     ..brightness = 0.25
+    ..contrast = 0.4
     ..warmth = -0.5;
   return c;
 }
@@ -121,6 +122,7 @@ void main() {
       expect(p.adjustments.tone, ToneFilter.mono);
       expect(p.adjustments.hue, 45);
       expect(p.adjustments.brightness, 0.25);
+      expect(p.adjustments.contrast, 0.4);
       expect(p.adjustments.warmth, -0.5);
       // Untouched photos keep their EXIF date.
       expect(c.photos[0].takenAt, DateTime(2024, 5, 1));

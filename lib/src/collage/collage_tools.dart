@@ -517,6 +517,14 @@ class _ColorPanel extends StatelessWidget {
           onChanged: (v) => update(() => a.brightness = v),
         ),
         _SliderRow(
+          label: 'Contrast',
+          value: a.contrast,
+          min: -1,
+          max: 1,
+          display: _signedPercent,
+          onChanged: (v) => update(() => a.contrast = v),
+        ),
+        _SliderRow(
           label: 'Warmth',
           value: a.warmth,
           min: -1,

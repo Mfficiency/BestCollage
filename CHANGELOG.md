@@ -2,6 +2,7 @@
 
 ## [0.4.12] - 2026-11-04
 - Date: turn the date stamp on or off for each photo by itself — select a photo in Date and flip its switch; there is no longer one switch for all photos. The colour still applies to every date shown
+- Color: new Contrast slider, for the whole collage or just the selected photo
 
 ## [0.4.11] - 2026-10-15
 - Changelog: every version shows when it was built, how long the build took and the size of its APK, taken from its GitHub release (the shared update module is now 1.5.0)

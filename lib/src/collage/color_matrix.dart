@@ -135,6 +135,7 @@ class ColorMatrix {
     if (a.hue != 0) m = multiply(hue(a.hue), m);
     if (a.saturation != 0) m = multiply(saturation(a.saturation), m);
     if (a.warmth != 0) m = multiply(warmth(a.warmth), m);
+    if (a.contrast != 0) m = multiply(contrast(1 + a.contrast * 0.7), m);
     if (a.brightness != 0) m = multiply(brightness(a.brightness), m);
     return m;
   }

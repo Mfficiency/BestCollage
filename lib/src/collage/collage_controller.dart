@@ -79,6 +79,7 @@ class CollageController extends ChangeNotifier {
       ..hue = old.adjustments.hue
       ..saturation = old.adjustments.saturation
       ..brightness = old.adjustments.brightness
+      ..contrast = old.adjustments.contrast
       ..warmth = old.adjustments.warmth;
     item.stamp = old.stamp.copy();
     item.showDate = old.showDate;
