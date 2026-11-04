@@ -52,7 +52,6 @@ CollageController editedCollage() {
     ..border = 14
     ..cornerRadius = 9
     ..borderColor = borderColors[2]
-    ..showDates = true
     ..dateColor = dateStampColors[3]
     ..colorScope = ColorScope.selected
     ..selected = 2
@@ -100,7 +99,6 @@ void main() {
       expect(c.border, 14);
       expect(c.cornerRadius, 9);
       expect(c.borderColor, borderColors[2]);
-      expect(c.showDates, isTrue);
       expect(c.dateColor, dateStampColors[3]);
       expect(c.colorScope, ColorScope.selected);
       expect(c.selected, 2);
@@ -127,6 +125,17 @@ void main() {
       // Untouched photos keep their EXIF date.
       expect(c.photos[0].takenAt, DateTime(2024, 5, 1));
       expect(c.photos[0].dateSource, DateSource.exif);
+    });
+
+    test('an older collage with dates switched off keeps them off', () {
+      final saved = jsonDecode(jsonEncode(editedCollage().toJson()))
+          as Map<String, dynamic>;
+      for (final p in saved['photos'] as List) {
+        (p as Map)['showDate'] = true;
+      }
+      saved['showDates'] = false;
+      final c = CollageController()..restore(saved, reload(saved));
+      expect(c.photos.any((p) => p.showDate), isFalse);
     });
 
     test('a missing photo drops out and the layout fits the rest', () {

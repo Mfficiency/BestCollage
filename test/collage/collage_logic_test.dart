@@ -165,8 +165,11 @@ void main() {
 
     test('new collages follow the date-stamp setting', () {
       AppSettings.instance.dateStampByDefault = true;
-      final c = CollageController()..addPhotos(samplePhotos(1));
-      expect(c.showDates, isTrue);
+      final c = CollageController()..addPhotos(samplePhotos(2));
+      expect(c.photos.every((p) => p.showDate), isTrue);
+      AppSettings.instance.dateStampByDefault = false;
+      final off = CollageController()..addPhotos(samplePhotos(2));
+      expect(off.photos.any((p) => p.showDate), isFalse);
     });
   });
 
