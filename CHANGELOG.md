@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.5.0] - 2026-11-05
+- Updates: checks for a new version every time you open the app, every 5 minutes while you use it, when you come back to it after a minute or more, and every hour while it is closed. A new version found while the app is closed downloads quietly; Android asks "Update this app?" the next time you open it
+
 ## [0.4.23] - 2026-11-04
 - Date: turn the date stamp on or off for each photo by itself — select a photo in Date and flip its switch; there is no longer one switch for all photos. The colour still applies to every date shown
 - Color: new Contrast slider, for the whole collage or just the selected photo

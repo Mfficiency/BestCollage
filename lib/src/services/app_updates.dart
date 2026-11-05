@@ -35,6 +35,23 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
         UpdateStatusCard,
         UpdateTokenTile;
 
+/// The update check while the app is closed: Android runs it every hour
+/// (package README.md › Background check). Loads what `main` loads for the
+/// updater, then only checks and downloads; the install is offered when the
+/// app is opened.
+@pragma('vm:entry-point')
+Future<void> updateCheckInBackground() => UpdateBackground.run(() async {
+      await AppSettings.instance.load();
+      await AppVersion.ensureLoaded();
+      final prefs = await SharedPreferences.getInstance();
+      final updates = AppUpdates.create(
+        tokens: SecureUpdateTokenStore(),
+        store: SharedPreferencesUpdateStore(prefs),
+      );
+      await updates.controller.init();
+      return updates.controller;
+    });
+
 /// BestCollage's side of the shared updates package
 /// (`packages/mfficiency_updates`, vendored from flutter_app_template, never
 /// edited here; its README.md describes the flow). Everything the updater
@@ -44,7 +61,9 @@ export 'package:mfficiency_updates/mfficiency_updates.dart'
 /// builds); this only holds the app's config:
 ///
 /// * the public repo Mfficiency/BestCollage, tags `v<x.y.z>-<build>[-dev|
-///   -staging]` of every channel, a 15-minute poll;
+///   -staging]` of every channel; checks every start, every 5 minutes while
+///   open, after a minute away and every hour while closed
+///   ([updateCheckInBackground]; the package's defaults);
 /// * an optional GitHub token (Settings › Updates › GitHub token, the
 ///   package's `UpdateTokenTile`, [tokenKey]) in secure storage
 ///   ([UpdateTokenStore]): not needed while the repo is
@@ -93,7 +112,6 @@ class AppUpdates {
   /// The Android applicationId (one app on every channel); About › Other
   /// apps leaves it out, also where Android can't be asked (desktop, tests).
   static const String appId = 'com.mfficiency.best_collage';
-  static const Duration interval = Duration(minutes: 15);
 
   /// Stays false: true makes checks require a token, so updates would stop
   /// on a phone without one. A saved token already downloads through the
@@ -211,9 +229,11 @@ class AppUpdates {
         tagPrefix: 'v',
         autoCheck: () => settings.autoUpdateCheckEnabled,
         autoCheckChanges: settings,
-        checkInterval: interval,
-        pollInterval: interval,
         firstCheckDelay: firstCheckDelay,
+        // When it checks is the package's default, the same in every
+        // Mfficiency app: every start, every 5 minutes while open, after a
+        // minute away, and every hour while closed (this entry point).
+        backgroundCheck: updateCheckInBackground,
       ),
       store: store ?? MemoryUpdateStore(),
       http: http,
