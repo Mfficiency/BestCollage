@@ -122,8 +122,11 @@ APK).
   (built at, build time, APK size from that version's GitHub release:
   notes footer + asset size; the CHANGELOG.md build lines as fallback,
   never both); opening the page reads the release list once. About and Settings › Updates have "Check for updates".
-  The package's default behaviour is the app's behaviour: coming back to
-  the app checks when the last check is 15+ minutes old; GitHub's anonymous
+  The package's default behaviour is the app's behaviour: it checks every
+  time the app opens, every 5 minutes while it is open, when coming back
+  after a minute or more, and every hour while it is closed (Android's
+  JobScheduler runs `updateCheckInBackground` in `app_updates.dart`: check
+  and silent download only, the install waits for the app); GitHub's anonymous
   limit (60/hour) — a 429, or a 403 without a token — pauses the automatic
   checks until the reset (30 minutes if unknown) and the status says "GitHub
   is limiting update checks right now — try again later." (pull-down and
@@ -131,8 +134,8 @@ APK).
   builds prefer main > staging > dev; User-Agent `BestCollage-update-check`.
   The app's side is `lib/src/services/app_updates.dart` (`AppUpdates`, set
   up in `main.dart`, started by `CollageAppState` after the first frame and
-  the intro) and holds only config: repo, tag prefix `v`, the 15-minute
-  poll, the "Automatically check for updates" switch (`AppSettings`) as
+  the intro) and holds only config: repo, tag prefix `v`, the background
+  entry point, the "Automatically check for updates" switch (`AppSettings`) as
   `autoCheck` + `autoCheckChanges` (the package starts/stops polling when it
   flips), url_launcher as `UpdatePlatform(openUrl:)` for links off Android,
   SharedPreferences store, date formats, log, and the update state of 0.4.5

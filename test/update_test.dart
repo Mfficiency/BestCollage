@@ -356,13 +356,18 @@ void main() {
     // Resume checks, the rate-limit pause, the switch, APK-less releases,
     // User-Agent and the channel order are the package's (tested there);
     // these only check what BestCollage hands it.
-    test('config: repo, tags, poll, switch, defaults kept', () async {
+    test('config: repo, tags, timing, switch, defaults kept', () async {
       final u = await makeUpdates();
       final c = u.controller.config;
       expect(c.githubRepo, 'Mfficiency/BestCollage');
       expect(c.tagPrefix, 'v');
-      expect(c.pollInterval, const Duration(minutes: 15));
-      expect(c.checkInterval, const Duration(minutes: 15));
+      // Every start, every 5 minutes open, back after a minute, hourly while
+      // closed: the same in every Mfficiency app.
+      expect(c.checkInterval, Duration.zero);
+      expect(c.pollInterval, const Duration(minutes: 5));
+      expect(c.resumeCheckAfter, const Duration(minutes: 1));
+      expect(c.backgroundInterval, const Duration(hours: 1));
+      expect(c.backgroundCheck, same(updateCheckInBackground));
       expect(c.autoCheckChanges, same(AppSettings.instance));
       expect(c.checkOnResume, isTrue);
       expect(c.requireApk, isTrue);
