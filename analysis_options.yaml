@@ -5,6 +5,10 @@
 analyzer:
   errors:
     todo: ignore
+  exclude:
+    - build/**
+    - android/**
+    - windows/**
 
 linter:
   rules:

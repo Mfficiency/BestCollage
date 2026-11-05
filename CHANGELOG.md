@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.6.1] - 2026-11-05
+- Security check of every library the app uses: none is compromised or has a known vulnerability. An unused library (flutter_markdown, no longer maintained) is gone
+
 ## [0.6.0] - 2026-11-05
 - Updates: a download that is cut off (no network, the app closed or put away) starts again by itself, in the app within seconds and in the background once there is a network, and continues where it stopped
 - About › Update all apps: updates this app and every other Mfficiency app on the phone in one go. The newest versions download in the background, then Android asks for each app, one after the other
