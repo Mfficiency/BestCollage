@@ -19,16 +19,18 @@ void main() {
     expect(find.text('Check for updates'), findsOneWidget);
   });
 
-  testWidgets('ends with Other apps, which lists the other apps',
+  testWidgets('ends with Other apps (which lists the other apps) and Update all',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(home: AboutPage()));
     await tester.pumpAndSettle();
 
     final link = find.byKey(const Key('otherApps.link'));
     await tester.scrollUntilVisible(link, 300);
-    // The last tile on the page.
-    expect(tester.widget(find.byType(ListTile).last).key,
-        const Key('otherApps.link'));
+    // The last tiles on the page: Other apps, then Update all apps.
+    final tiles = tester.widgetList(find.byType(ListTile)).toList();
+    expect(tiles[tiles.length - 2].key, const Key('otherApps.link'));
+    expect(tiles.last.key, const Key('otherApps.updateAll'));
+    expect(find.text('Update all apps'), findsOneWidget);
 
     await tester.tap(link);
     await tester.pumpAndSettle();

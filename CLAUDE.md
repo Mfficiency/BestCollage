@@ -112,7 +112,9 @@ APK).
   session as fallback) asks "Update this app?" as the only confirm and ends
   with "App updated" and Open, by itself once per build and start while in the foreground.
   Cancelled: the slim `UpdateBanner` on the home screen (`collage_page.dart`)
-  offers Install; a failed download offers Try again. A tap that starts a
+  offers Install; a failed download is tried again by itself (10 s … every
+  5 min while open, at once on resume, and by the package's background job
+  once there is a network) and offers Try again meanwhile. A tap that starts a
   download shows one SnackBar. The Changelog shows the package's
   `UpdateStatusCard` ("Version x.y.z (build) · channel" on top, a status
   line only when not up to date, then Downloaded: / Installed: / Last
@@ -208,7 +210,9 @@ APK).
   install shows nothing. `AppSettings.whatsNew` (Settings › Releases, on by
   default) turns it off. Tests: `test/whats_new_test.dart`.
 - Other apps (package 1.8.0, README.md › Other apps): the last row of About
-  (`about_page.dart`, a Card with `OtherAppsLink`) opens the package's
+  (`about_page.dart`, a Card with `OtherAppsLink`, which ends with Update all
+  apps since package 1.12.0: every installed app with an update, this one
+  last through `selfUpdates`) opens the package's
   `OtherAppsPage` with every other Mfficiency app (`mfficiencyApps`;
   BestCollage itself left out via `AppUpdates.appId`): installed or not, its
   newest release, Install (silent download, then Android's installer) /

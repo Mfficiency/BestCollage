@@ -266,7 +266,7 @@ class AppUpdates {
       platform: updatePlatform,
       fallbackToken: problemReport.token,
       userAgent: 'BestCollage-other-apps',
-    );
+    )..selfUpdates = controller; // About › Update all apps: this app last
     return updates = AppUpdates._(
         controller, backup, tokenStore, problemReport, otherApps);
   }
