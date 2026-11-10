@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.7.0] - 2026-11-10
+- Undo and Redo buttons under the collage. Zoom the view (magnifier button): pinch, scroll or drag to look closely at the whole collage without changing it — the close-up stays while you edit, and Fit to screen goes back. Borders: the left & right edges and the top & bottom edges each have their own width, apart from the width between photos; each slider shows a little diagram of its lines, and while you drag it those borders light up on the collage
+
 ## [0.6.1] - 2026-11-05
 - Security check of every library the app uses: none is compromised or has a known vulnerability. An unused library (flutter_markdown, no longer maintained) is gone
 
