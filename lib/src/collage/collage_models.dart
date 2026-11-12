@@ -20,7 +20,15 @@ enum ToneFilter {
 /// once per photo — the photo's set is applied on top of the collage's.
 ///
 /// Slider values are all centred on 0 so "no change" is the default.
+///
+/// The Color tab's sliders go from -30 to +30 ([maxHue] degrees, [maxAdjust]
+/// for the others); only saturation goes down to -100 (grey). Saved values
+/// outside that (from older versions) still load as they were.
 class Adjustments {
+  static const double maxHue = 30;
+  static const double maxAdjust = 0.3;
+  static const double minSaturation = -1;
+
   ToneFilter tone;
 
   /// Hue rotation in degrees, -180..180.

@@ -142,6 +142,41 @@ void main() {
     expect(c.globalAdjustments.tone, ToneFilter.mono);
   });
 
+  testWidgets('color sliders go -30..+30 (saturation from -100); '
+      'a double tap on the name sets 0', (tester) async {
+    final c = await pumpPage(tester, photos: 2);
+    await tester.tap(find.text('Color'));
+    await tester.pumpAndSettle();
+
+    Slider sliderOf(String label) => tester.widget<Slider>(find.descendant(
+        of: find
+            .ancestor(of: find.text(label), matching: find.byType(Row))
+            .first,
+        matching: find.byType(Slider)));
+    expect(sliderOf('Hue').min, -30);
+    expect(sliderOf('Hue').max, 30);
+    expect(sliderOf('Saturation').min, -1);
+    expect(sliderOf('Saturation').max, 0.3);
+    for (final l in ['Brightness', 'Contrast', 'Warmth']) {
+      expect(sliderOf(l).min, -0.3, reason: l);
+      expect(sliderOf(l).max, 0.3, reason: l);
+    }
+
+    c.globalAdjustments
+      ..brightness = 0.2
+      ..saturation = -0.8;
+    c.changed();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Brightness'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Brightness'));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('Brightness'));
+    await tester.pumpAndSettle();
+    expect(c.globalAdjustments.brightness, 0);
+    expect(c.globalAdjustments.saturation, -0.8);
+  });
+
   testWidgets('date tool shows dd.mm.yy stamps', (tester) async {
     final c = await pumpPage(tester, photos: 2);
     expect(find.text('01.05.24'), findsNothing);

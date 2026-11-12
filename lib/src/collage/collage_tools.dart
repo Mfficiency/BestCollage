@@ -76,6 +76,9 @@ class _SliderRow extends StatelessWidget {
   final ValueChanged<double>? onChangeStart;
   final ValueChanged<double>? onChangeEnd;
 
+  /// A double tap on the label calls this (the colour sliders: back to 0).
+  final VoidCallback? onLabelDoubleTap;
+
   /// Shown before the label (the border diagrams).
   final Widget? leading;
   final double labelWidth;
@@ -89,6 +92,7 @@ class _SliderRow extends StatelessWidget {
     required this.onChanged,
     this.onChangeStart,
     this.onChangeEnd,
+    this.onLabelDoubleTap,
     this.leading,
     this.labelWidth = 84,
   });
@@ -98,7 +102,16 @@ class _SliderRow extends StatelessWidget {
     return Row(
       children: [
         if (leading != null) ...[leading!, const SizedBox(width: 8)],
-        SizedBox(width: labelWidth, child: Text(label)),
+        SizedBox(
+          width: labelWidth,
+          child: onLabelDoubleTap == null
+              ? Text(label)
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: onLabelDoubleTap,
+                  child: Text(label),
+                ),
+        ),
         Expanded(
           child: Slider(
             value: value.clamp(min, max),
@@ -588,42 +601,47 @@ class _ColorPanel extends StatelessWidget {
         _SliderRow(
           label: 'Hue',
           value: a.hue,
-          min: -180,
-          max: 180,
+          min: -Adjustments.maxHue,
+          max: Adjustments.maxHue,
           display: (v) => '${v.round()}°',
           onChanged: (v) => update(() => a.hue = v),
+          onLabelDoubleTap: () => update(() => a.hue = 0),
         ),
         _SliderRow(
           label: 'Saturation',
           value: a.saturation,
-          min: -1,
-          max: 1,
+          min: Adjustments.minSaturation,
+          max: Adjustments.maxAdjust,
           display: _signedPercent,
           onChanged: (v) => update(() => a.saturation = v),
+          onLabelDoubleTap: () => update(() => a.saturation = 0),
         ),
         _SliderRow(
           label: 'Brightness',
           value: a.brightness,
-          min: -1,
-          max: 1,
+          min: -Adjustments.maxAdjust,
+          max: Adjustments.maxAdjust,
           display: _signedPercent,
           onChanged: (v) => update(() => a.brightness = v),
+          onLabelDoubleTap: () => update(() => a.brightness = 0),
         ),
         _SliderRow(
           label: 'Contrast',
           value: a.contrast,
-          min: -1,
-          max: 1,
+          min: -Adjustments.maxAdjust,
+          max: Adjustments.maxAdjust,
           display: _signedPercent,
           onChanged: (v) => update(() => a.contrast = v),
+          onLabelDoubleTap: () => update(() => a.contrast = 0),
         ),
         _SliderRow(
           label: 'Warmth',
           value: a.warmth,
-          min: -1,
-          max: 1,
+          min: -Adjustments.maxAdjust,
+          max: Adjustments.maxAdjust,
           display: _signedPercent,
           onChanged: (v) => update(() => a.warmth = v),
+          onLabelDoubleTap: () => update(() => a.warmth = 0),
         ),
         Align(
           alignment: Alignment.centerRight,

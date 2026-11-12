@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.7.1] - 2026-11-12
+- Color: the Hue, Brightness, Contrast and Warmth sliders go from -30 to +30 for finer control; Saturation goes from -100 (grey) to +30. Double-tap a slider's name to set it back to 0
+
 ## [0.7.0] - 2026-11-10
 - Undo and Redo buttons under the collage. Zoom the view (magnifier button): pinch, scroll or drag to look closely at the whole collage without changing it — the close-up stays while you edit, and Fit to screen goes back. Borders: the left & right edges and the top & bottom edges each have their own width, apart from the width between photos; each slider shows a little diagram of its lines, and while you drag it those borders light up on the collage
 
